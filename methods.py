@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
-
+from skimage.feature import local_binary_pattern
+from scipy.stats import itemfreq
 
 def preprocess_image(image_path):
     img = cv2.imread(image_path)
@@ -36,3 +37,15 @@ def classify_shapes(contour):
     else:
         return 'irregular'
 
+
+def lbp_features(image_path, radius=1, n_points=8, method='uniform'):
+    image = cv2.imread(image_path)
+    if len(image.shape) > 2:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    lbp = local_binary_pattern(image, n_points, radius, method)
+
+    hist, _ = np.histogram(lbp.ravel(), bins=np.arange(0, n_points + 3), range=(0, n_points + 2))
+    hist = hist.astype("float")
+    hist /= (hist.sum() + 1e-7)
+
+    return hist
