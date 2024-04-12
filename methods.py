@@ -1,14 +1,53 @@
 import cv2
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 from skimage.feature import local_binary_pattern
 from scipy.stats import itemfreq
 
-def preprocess_image(image_path):
+def convert_grayscale(image_path):
     img = cv2.imread(image_path)
     gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    resized_img = cv2.resize(gray_img, (600, 450))
-    return resized_img
+    #resized_img = cv2.resize(gray_img, (600, 450))
+    return gray_img
 
+def convert_rgb(image_path):
+    """
+    Converts the image to normalised RGB format
+    """
+    img = cv2.imread(image_path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    normalised_img = img / 255.0
+    return normalised_img
+
+def color_distribution(img):
+    """
+    Returns the color distribution of the image
+    """
+    df = pd.DataFrame(img.reshape(-1, 3), columns=['R', 'G', 'B'])
+    color_distribution = df.describe()
+    return color_distribution
+
+def create_rgb_histogram(img):
+    """
+    Create one RGB histogram based on the distribution of the image
+    """
+    img = cv2.imread(img)
+    color = ('b', 'g', 'r')
+    for i, col in enumerate(color):
+        histr = cv2.calcHist([img], [i], None, [256], [0, 256])
+        plt.plot(histr, color=col)
+        plt.xlim([0, 256])
+    plt.show()
+    return histr
+    
+def get_contrast(img):
+    """
+    Returns the contrast of the image
+    """
+    img = convert_grayscale(img)
+    std_dev = np.std(img) #Contrast
+    return std_dev
 
 def load_preprocess_image(file_path):
     image = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
@@ -49,3 +88,4 @@ def lbp_features(image_path, radius=1, n_points=8, method='uniform'):
     hist /= (hist.sum() + 1e-7)
 
     return hist
+
