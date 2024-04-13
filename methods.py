@@ -1,15 +1,17 @@
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from skimage.feature import local_binary_pattern
 from scipy.stats import itemfreq
+from skimage.feature import local_binary_pattern
+
 
 def convert_grayscale(image_path):
     img = cv2.imread(image_path)
     gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    #resized_img = cv2.resize(gray_img, (600, 450))
+    # resized_img = cv2.resize(gray_img, (600, 450))
     return gray_img
+
 
 def convert_rgb(image_path):
     """
@@ -20,34 +22,38 @@ def convert_rgb(image_path):
     normalised_img = img / 255.0
     return normalised_img
 
+
 def color_distribution(img):
     """
     Returns the color distribution of the image
     """
-    df = pd.DataFrame(img.reshape(-1, 3), columns=['R', 'G', 'B'])
+    df = pd.DataFrame(img.reshape(-1, 3), columns=["R", "G", "B"])
     color_distribution = df.describe()
     return color_distribution
+
 
 def create_rgb_histogram(img):
     """
     Create one RGB histogram based on the distribution of the image
     """
     img = cv2.imread(img)
-    color = ('b', 'g', 'r')
+    color = ("b", "g", "r")
     for i, col in enumerate(color):
         histr = cv2.calcHist([img], [i], None, [256], [0, 256])
         plt.plot(histr, color=col)
         plt.xlim([0, 256])
     plt.show()
     return histr
-    
+
+
 def get_contrast(img):
     """
     Returns the contrast of the image
     """
     img = convert_grayscale(img)
-    std_dev = np.std(img) #Contrast
+    std_dev = np.std(img)  # Contrast
     return std_dev
+
 
 def load_preprocess_image(file_path):
     image = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
@@ -65,27 +71,28 @@ def extract_contours(thresh):
 def classify_shapes(contour):
     area = cv2.contourArea(contour)
     perimeter = cv2.arcLength(contour, True)
-    circularity = 4 * np.pi * (area / (perimeter ** 2))
+    circularity = 4 * np.pi * (area / (perimeter**2))
     approx = cv2.approxPolyDP(contour, 0.04 * perimeter, True)
 
     # print("Circularity:", circularity, "Vertices:", len(approx))
     if len(approx) > 4 and circularity > 0.6:
-        return 'circular'
+        return "circular"
     elif len(approx) < 5 and circularity < 0.7:
-        return 'pointed'
+        return "pointed"
     else:
-        return 'irregular'
+        return "irregular"
 
 
-def lbp_features(image_path, radius=1, n_points=8, method='uniform'):
+def lbp_features(image_path, radius=1, n_points=8, method="uniform"):
     image = cv2.imread(image_path)
     if len(image.shape) > 2:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     lbp = local_binary_pattern(image, n_points, radius, method)
 
-    hist, _ = np.histogram(lbp.ravel(), bins=np.arange(0, n_points + 3), range=(0, n_points + 2))
+    hist, _ = np.histogram(
+        lbp.ravel(), bins=np.arange(0, n_points + 3), range=(0, n_points + 2)
+    )
     hist = hist.astype("float")
-    hist /= (hist.sum() + 1e-7)
+    hist /= hist.sum() + 1e-7
 
     return hist
-
