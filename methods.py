@@ -2,9 +2,21 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy.ndimage import convolve
+from scipy.stats import kurtosis, skew
 from skimage import color, feature
 from skimage.draw import disk
 from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
+from skimage.filters import gabor_kernel
+
+
+def z_normalization(data: np.array, normalize=True) -> np.array:
+    if normalize:
+        mean = np.mean(data)
+        std_dev = np.std(data)
+        return (data - mean) / std_dev
+    else:
+        return data
 
 
 def convert_grayscale(image_path):
@@ -124,9 +136,10 @@ def lbp_features(image_path, radius=1, n_points=8, method="uniform"):
     return hist
 
 
-# Function to calculate GLCM features for a specific region (blob) in the image
 def calculate_glcm_features_for_blob(gray_image, blob):
     """
+    Function to calculate GLCM features for a specific region (blob) in the image
+
     :param gray_image:
     :param blob:
     :return: feature vector
@@ -175,10 +188,51 @@ def calculate_glcm_features_for_blob(gray_image, blob):
     return feature_vector
 
 
+def calculate_glcm_features(image: np.ndarray) -> list:
+    """
+    Compute the Gray-Level Co-Occurrence Matrix (GLCM)
+
+    :param image:
+    :return: feature vector
+    """
+    gray_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+    # Normalize pixel values to 0 - 255
+    gray_image = np.uint8(
+        (gray_image - gray_image.min()) / (gray_image.max() - gray_image.min()) * 255
+    )
+
+    glcm = graycomatrix(
+        gray_image,
+        distances=[1, 2, 3],
+        angles=[0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
+        symmetric=True,
+        normed=True,
+    )
+
+    # Feature extraction
+    properties = [
+        "contrast",
+        "dissimilarity",
+        "homogeneity",
+        "energy",
+        "correlation",
+        "ASM",
+    ]
+    feature_vector = []
+
+    for prop in properties:
+        temp = graycoprops(glcm, prop).flatten()  # Flatten to convert from 2D to 1D
+        feature_vector.append(np.mean(temp))  # Taking mean across different angles
+
+    return feature_vector
+
+
 def detect_significant_blob(image, plot_image=False, plot_chosen_transformation=False):
     """
     Loosely based on https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_blob.html
     Goal: detect a significant circular blob inside an image
+
     :param image: cv2 in RGB (!) format
     :param plot_image: produce plot of detected blob overlayed on input image
     :param plot_chosen_transformation: if chosen the trasformed image is plotted (i.e., saturation channel)
@@ -270,6 +324,7 @@ def detect_significant_blob(image, plot_image=False, plot_chosen_transformation=
 def calculate_std_within_blob(image_channel, blob):
     """
     Calculate the standard deviation of pixel values inside the detected blob.
+
     :param image_channel: the image channel (2D array) on which to perform the calculation
     :param blob: a tuple (row, column, radius) defining the blob location and size.
     :return: standard deviation of the pixel values inside the blob.
@@ -287,3 +342,47 @@ def calculate_std_within_blob(image_channel, blob):
     std_dev = np.std(pixel_values_inside_blob)
 
     return std_dev
+
+
+def apply_gabor_filters_and_extract_features(image, frequencies, thetas, sigmas):
+    """
+    Apply Gabor filters to an image at specified frequencies and orientations, and extract features.
+    Loosely based on https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_gabor.html
+
+    :param image: cv2 RGB image
+    :param frequencies: List of frequencies for the Gabor kernels.
+    :param thetas: List of orientations in radians for the Gabor kernels.
+    :return: Dictionary of features with keys as (frequency, theta) tuples.
+    """
+    # convert the image in grayscale
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+    # List to store the features from all filters
+    feature_vector = []
+
+    # prepare filter bank kernels
+    kernels = []
+    for theta in thetas:
+        for sigma in sigmas:
+            for frequency in frequencies:
+                # Create a Gabor kernel with the given frequency and theta
+                kernel = np.real(
+                    gabor_kernel(frequency, theta=theta, sigma_x=sigma, sigma_y=sigma)
+                )
+                kernels.append(kernel)
+
+    # Apply Gabor filters at each combination of frequency and theta
+    for real_kernel in kernels:
+        # Filter the image using the real part of the kernel
+        filtered_image = convolve(image, real_kernel)
+
+        # Calculate statistical features from the filtered image
+        mean_val = np.mean(filtered_image)
+        std_val = np.std(filtered_image)
+        skew_val = skew(filtered_image.ravel())
+        kurt_val = kurtosis(filtered_image.ravel())
+
+        # Append the features to the feature vector
+        feature_vector.extend([mean_val, std_val, skew_val, kurt_val])
+
+    return feature_vector
