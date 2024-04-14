@@ -68,7 +68,7 @@ def create_histogram(image, color_space="RGB"):
     if color_space == "RGB":
         pass
     elif color_space == "HSV":
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
     else:
         assert False
 
