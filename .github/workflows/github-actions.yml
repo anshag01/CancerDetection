@@ -1,4 +1,4 @@
-name: GitHub Actions
+name: Linting
 run-name: ${{ github.actor }} running GitHub Actions 🚀
 on: [push]
 jobs:
@@ -16,3 +16,5 @@ jobs:
         run: |
           ls ${{ github.workspace }}
       - run: echo "🍏 This job's status is ${{ job.status }}."
+      - name: Black Code Formatter
+        uses: lgeiger/black-action@v1.0.1
