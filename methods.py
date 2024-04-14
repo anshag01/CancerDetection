@@ -1,26 +1,10 @@
-import math
-import os
-
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from skimage import color, data, feature, io
-from skimage.color import rgb2gray
+from skimage import color, feature
 from skimage.draw import disk
-from skimage.feature import (blob_dog, blob_doh, blob_log, graycomatrix,
-                             graycoprops, local_binary_pattern)
-from sklearn import svm
-from sklearn.decomposition import PCA
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (ConfusionMatrixDisplay, accuracy_score,
-                             classification_report, confusion_matrix, f1_score,
-                             precision_score, recall_score)
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from tqdm import tqdm
-
-import methods
+from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 
 
 def convert_grayscale(image_path):
@@ -61,6 +45,8 @@ def create_rgb_histogram(img):
         plt.xlim([0, 256])
     plt.show()
     return histr
+
+
 def create_histogram(image, color_space="RGB"):
     """
     :param img: cv2 RGB imput image
@@ -68,7 +54,7 @@ def create_histogram(image, color_space="RGB"):
     """
 
     if color_space == "RGB":
-        color = ("r", "g", "b")
+        pass
     elif color_space == "HSV":
         image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     else:
@@ -157,7 +143,6 @@ def detect_significant_blob(image, plot_image=False, plot_chosen_transformation=
     # detect blobs using transformed image
     blobs = []
     i = 0
-    std = np.std(transformed_image)
     threshold = 0.02
     decrement = 0.95
     max_sigma = 500  # tweak these values a bit
@@ -208,7 +193,8 @@ def detect_significant_blob(image, plot_image=False, plot_chosen_transformation=
         cost_fct.append(std_in_blob * r)
         calculate_stds_within_blob.append(std_in_blob)
 
-    # calculate the cost function of the image inside the blob -> we want to select the largest one
+    # calculate the cost function of the image inside the blob -> we want to
+    # select the largest one
     significant_blob = blobs[np.argmax(cost_fct)]
 
     y, x, r = significant_blob
@@ -248,6 +234,3 @@ def calculate_std_within_blob(image_channel, blob):
     std_dev = np.std(pixel_values_inside_blob)
 
     return std_dev
-
-
-# %%
