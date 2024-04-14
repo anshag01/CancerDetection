@@ -122,6 +122,59 @@ def lbp_features(image_path, radius=1, n_points=8, method="uniform"):
     hist /= hist.sum() + 1e-7
 
     return hist
+
+
+# Function to calculate GLCM features for a specific region (blob) in the image
+def calculate_glcm_features_for_blob(gray_image, blob):
+    """
+    :param gray_image:
+    :param blob:
+    :return: feature vector
+    """
+    y, x, r = blob
+
+    # generate a mask for the blob area
+    rr, cc = disk((y, x), r, shape=gray_image.shape)
+    mask = np.zeros_like(gray_image, dtype=bool)
+    mask[rr, cc] = True
+
+    # use the mask to select the region of interest
+    blob_region = gray_image[mask]
+
+    # compute the GLCM for the selected region
+    roi_image = np.zeros_like(gray_image)
+    roi_image[rr, cc] = blob_region
+
+    # compute the GLCM
+    glcm = graycomatrix(
+        roi_image,
+        distances=[1, 2, 3],
+        angles=[0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
+        symmetric=True,
+        normed=True,
+    )
+
+    # feature extraction
+    properties = [
+        "contrast",
+        "dissimilarity",
+        "homogeneity",
+        "energy",
+        "correlation",
+        "ASM",
+    ]
+
+    feature_vector = []
+    for prop in properties:
+        # Flatten to convert from 2D to 1D
+        temp = graycoprops(glcm, prop).flatten()
+
+        # Taking mean across different angles
+        feature_vector.append(np.mean(temp))
+
+    return feature_vector
+
+
 def detect_significant_blob(image, plot_image=False, plot_chosen_transformation=False):
     """
     Loosely based on https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_blob.html
