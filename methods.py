@@ -57,8 +57,7 @@ def get_contrast(img):
 def load_preprocess_image(file_path):
     image = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
     blurred = cv2.GaussianBlur(image, (5, 5), 0)
-    _, thresh = cv2.threshold(
-        blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return thresh
 
 
