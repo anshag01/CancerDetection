@@ -5,3 +5,5 @@ preprocessed_images/
 __pycache__/
 
 .DS_Store
+
+figures/
