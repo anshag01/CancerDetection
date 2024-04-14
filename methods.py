@@ -1,8 +1,26 @@
+import math
+import os
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from skimage.feature import local_binary_pattern
+from skimage import color, data, feature, io
+from skimage.color import rgb2gray
+from skimage.draw import disk
+from skimage.feature import (blob_dog, blob_doh, blob_log, graycomatrix,
+                             graycoprops, local_binary_pattern)
+from sklearn import svm
+from sklearn.decomposition import PCA
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (ConfusionMatrixDisplay, accuracy_score,
+                             classification_report, confusion_matrix, f1_score,
+                             precision_score, recall_score)
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from tqdm import tqdm
+
+import methods
 
 
 def convert_grayscale(image_path):
@@ -43,6 +61,29 @@ def create_rgb_histogram(img):
         plt.xlim([0, 256])
     plt.show()
     return histr
+def create_histogram(image, color_space="RGB"):
+    """
+    :param img: cv2 RGB imput image
+    :return: Create one RGB histogram based on the distribution of the image.
+    """
+
+    if color_space == "RGB":
+        color = ("r", "g", "b")
+    elif color_space == "HSV":
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    else:
+        assert False
+
+    # Split the image into its respective channels
+    channels = cv2.split(image)
+
+    # Calculate histograms
+    histograms = []
+    for channel in channels:
+        hist, bins = np.histogram(channel, bins=256, range=[0, 256])
+        histograms.append(hist)
+
+    return histograms
 
 
 def get_contrast(img):
@@ -57,8 +98,7 @@ def get_contrast(img):
 def load_preprocess_image(file_path):
     image = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
     blurred = cv2.GaussianBlur(image, (5, 5), 0)
-    _, thresh = cv2.threshold(
-        blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return thresh
 
 
@@ -96,3 +136,118 @@ def lbp_features(image_path, radius=1, n_points=8, method="uniform"):
     hist /= hist.sum() + 1e-7
 
     return hist
+def detect_significant_blob(image, plot_image=False, plot_chosen_transformation=False):
+    """
+    Loosely based on https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_blob.html
+    Goal: detect a significant circular blob inside an image
+    :param image: cv2 in RGB (!) format
+    :param plot_image: produce plot of detected blob overlayed on input image
+    :param plot_chosen_transformation: if chosen the trasformed image is plotted (i.e., saturation channel)
+    :return: (y, x, r) of detected blob
+    """
+
+    # transformed_image = color.rgb2gray(image)
+    transformed_image = color.rgb2hsv(image)[
+        :, :, 1
+    ]  # extract the hue channel or the channel of interest
+    transformed_image = (transformed_image - np.min(transformed_image)) / (
+        np.max(transformed_image) - np.min(transformed_image)
+    )
+
+    # detect blobs using transformed image
+    blobs = []
+    i = 0
+    std = np.std(transformed_image)
+    threshold = 0.02
+    decrement = 0.95
+    max_sigma = 500  # tweak these values a bit
+    height, width = transformed_image.shape[:2]
+
+    while len(blobs) <= 3:
+        blobs = feature.blob_doh(
+            transformed_image, max_sigma=max_sigma, threshold=threshold
+        )
+        i += 1
+        max_sigma *= 0.97
+        threshold *= decrement
+
+        # select only the blobs that are fully inside the image
+        blobs = np.array(
+            [
+                (y, x, r)
+                for (y, x, r) in blobs
+                if (r > 40 and x > 0 and y > 0 and r < max_sigma)
+                or (
+                    y - r >= 0
+                    and x - r >= 0
+                    and r >= 10
+                    and y + r <= height
+                    and x + r <= width
+                )
+            ]
+        )
+        if i == 50:
+            break
+
+    if blobs.size == 0:
+        print("No blobs detected.")
+        blobs = [(height / 2, width / 2, 150)]
+
+    calculate_stds_within_blob = []
+    cost_fct = []
+    plot_blobs = []
+
+    for blob in blobs:
+        y, x, r = blob
+        c = plt.Circle((x, y), 1 * r, color="w", linestyle=":", linewidth=2, fill=False)
+
+        # if multiple patches should be plotted
+        plot_blobs.append(c)
+
+        std_in_blob = calculate_std_within_blob(transformed_image, blob)
+        cost_fct.append(std_in_blob * r)
+        calculate_stds_within_blob.append(std_in_blob)
+
+    # calculate the cost function of the image inside the blob -> we want to select the largest one
+    significant_blob = blobs[np.argmax(cost_fct)]
+
+    y, x, r = significant_blob
+    c = plt.Circle((x, y), 1 * r, color="r", linewidth=3, fill=False)
+    plot_blobs.append(c)
+    if plot_image:
+        fig, ax = plt.subplots(1, 1)
+
+        for c in plot_blobs:
+            ax.add_patch(c)
+
+        ax.imshow(image)
+        if plot_chosen_transformation:
+            ax.imshow(transformed_image, cmap=plt.cm.gray)
+        plt.show()
+
+    return significant_blob
+
+
+def calculate_std_within_blob(image_channel, blob):
+    """
+    Calculate the standard deviation of pixel values inside the detected blob.
+    :param image_channel: the image channel (2D array) on which to perform the calculation
+    :param blob: a tuple (row, column, radius) defining the blob location and size.
+    :return: standard deviation of the pixel values inside the blob.
+    """
+    # extract the center and radius of the blob
+    y, x, r = blob
+
+    # get the indices for the pixels inside the blob
+    rr, cc = disk((y, x), r, shape=image_channel.shape)
+
+    # extract pixel values inside the blob
+    pixel_values_inside_blob = image_channel[rr, cc]
+
+    # calculate the std
+    std_dev = np.std(pixel_values_inside_blob)
+
+    return std_dev
+
+
+# %%
