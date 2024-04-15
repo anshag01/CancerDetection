@@ -220,7 +220,7 @@ def augment_and_save_image(class_path, original_images, images):
     image_to_augument = random.choice(original_images)
     image_path = os.path.join(class_path, image_to_augument)
     angle = random_rotation_angle()
-    new_image = rotate_image(cv2.imread(image_path), angle)  # Assuming a rotate_image function exists
+    new_image = crop_rotate(cv2.imread(image_path), angle)
     new_image_name = f"augmented_{angle:.0f}deg_{image_to_augument}"
     new_image_path = os.path.join(class_path, new_image_name)
     cv2.imwrite(new_image_path, new_image)
@@ -237,3 +237,8 @@ def random_rotation_angle():
         (360 - diff_angle, 360)
     ]
     return random.uniform(*random.choice(intervals))
+
+def split_data_and_oversample(dataset_directory, processed_folder_path, labels_df, train_size=0.8):
+    split_data_with_labels(dataset_directory, processed_folder_path, labels_df, train_size)
+    oversample_train_data(os.path.join(processed_folder_path, "train"))
+
