@@ -1,11 +1,10 @@
 import math
+import os
+import random
+import shutil
 
 import cv2
 import numpy as np
-import random
-import os
-import methods
-import shutil
 from sklearn.model_selection import train_test_split
 
 
@@ -160,28 +159,39 @@ def create_directories(path_list):
     for path in path_list:
         os.makedirs(path, exist_ok=True)
 
+
 def filter_files_in_directory(directory, extension=".jpg"):
     """List files in directory with specific extension and return without extension."""
-    return [f.split(".")[0] for f in os.listdir(directory) if f.endswith(extension) and os.path.isfile(os.path.join(directory, f))]
+    return [
+        f.split(".")[0]
+        for f in os.listdir(directory)
+        if f.endswith(extension) and os.path.isfile(os.path.join(directory, f))
+    ]
+
 
 def copy_files(files, destination):
     """Copy files to the specified destination."""
     for file in files:
         shutil.copy(file, destination)
 
-def split_data_with_labels(dataset_directory, processed_folder_path, labels_df, train_size=0.8):
-    train_dir = os.path.join(processed_folder_path, 'train')
-    test_dir = os.path.join(processed_folder_path, 'test')
+
+def split_data_with_labels(
+    dataset_directory, processed_folder_path, labels_df, train_size=0.8
+):
+    train_dir = os.path.join(processed_folder_path, "train")
+    test_dir = os.path.join(processed_folder_path, "test")
     create_directories([train_dir, test_dir])
 
     files = filter_files_in_directory(dataset_directory)
-    labels_df = labels_df[labels_df['image_id'].isin(files)]
+    labels_df = labels_df[labels_df["image_id"].isin(files)]
 
-    for class_label in labels_df['cancer'].unique():
-        class_df = labels_df[labels_df['cancer'] == class_label]
-        images = (class_df['image_id'] + ".jpg").tolist()
+    for class_label in labels_df["cancer"].unique():
+        class_df = labels_df[labels_df["cancer"] == class_label]
+        images = (class_df["image_id"] + ".jpg").tolist()
         images_full_path = [os.path.join(dataset_directory, img) for img in images]
-        train_imgs, test_imgs = train_test_split(images_full_path, train_size=train_size, random_state=42)
+        train_imgs, test_imgs = train_test_split(
+            images_full_path, train_size=train_size, random_state=42
+        )
 
         class_train_dir = os.path.join(train_dir, str(class_label))
         class_test_dir = os.path.join(test_dir, str(class_label))
@@ -189,6 +199,7 @@ def split_data_with_labels(dataset_directory, processed_folder_path, labels_df, 
 
         copy_files(train_imgs, class_train_dir)
         copy_files(test_imgs, class_test_dir)
+
 
 def oversample_train_data(train_directory):
     random.seed(42)
@@ -205,15 +216,19 @@ def oversample_train_data(train_directory):
     max_images = max(elements_per_class)
     augment_images_in_classes(train_directory, class_labels, max_images)
 
+
 def augment_images_in_classes(train_directory, class_labels, max_images):
     """Oversample training data by augmenting images within each class."""
     for class_folder in class_labels:
         class_path = os.path.join(train_directory, class_folder)
         images = os.listdir(class_path)
-        original_images = [img for img in images if img.endswith('.jpg') and 'augmented' not in img]
+        original_images = [
+            img for img in images if img.endswith(".jpg") and "augmented" not in img
+        ]
 
         while len(images) < max_images:
             augment_and_save_image(class_path, original_images, images)
+
 
 def augment_and_save_image(class_path, original_images, images):
     """Augment an image with random rotation and save it."""
@@ -226,6 +241,7 @@ def augment_and_save_image(class_path, original_images, images):
     cv2.imwrite(new_image_path, new_image)
     images.append(new_image_name)
 
+
 def random_rotation_angle():
     """Generate a random rotation angle within predefined intervals."""
     diff_angle = 15  # degree
@@ -234,9 +250,10 @@ def random_rotation_angle():
         (90 - diff_angle, 90 + diff_angle),
         (180 - diff_angle, 180 + diff_angle),
         (270 - diff_angle, 270 + diff_angle),
-        (360 - diff_angle, 360)
+        (360 - diff_angle, 360),
     ]
     return random.uniform(*random.choice(intervals))
+
 
 def move_pictures_up(directory):
     """
@@ -245,7 +262,7 @@ def move_pictures_up(directory):
     :param directory: The parent directory containing the 'True' and 'False' subdirectories.
     """
     # Define subfolders
-    subfolders = ['True', 'False']
+    subfolders = ["True", "False"]
 
     for subfolder in subfolders:
         subfolder_path = os.path.join(directory, subfolder)
@@ -263,14 +280,27 @@ def move_pictures_up(directory):
             # After moving all files, try to remove the subfolder
             try:
                 os.rmdir(subfolder_path)
-            except OSError as e:
-                print(f"Error: {subfolder_path} could not be removed. It may not be empty.")
+            except OSError:
+                print(
+                    f"Error: {subfolder_path} could not be removed. It may not be empty."
+                )
         else:
-            print(f"Warning: The directory {subfolder_path} does not exist or is not a directory.")
+            print(
+                f"Warning: The directory {subfolder_path} does not exist or is not a directory."
+            )
 
 
-def split_data_and_oversample(dataset_directory, processed_folder_path, labels_df, train_size=0.8, should_move_pictures_up=True, oversample=False):
-    split_data_with_labels(dataset_directory, processed_folder_path, labels_df, train_size)
+def split_data_and_oversample(
+    dataset_directory,
+    processed_folder_path,
+    labels_df,
+    train_size=0.8,
+    should_move_pictures_up=True,
+    oversample=False,
+):
+    split_data_with_labels(
+        dataset_directory, processed_folder_path, labels_df, train_size
+    )
 
     if oversample:
         oversample_train_data(os.path.join(processed_folder_path, "train"))

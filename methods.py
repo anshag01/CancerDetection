@@ -1,3 +1,5 @@
+import os
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,7 +11,7 @@ from skimage.draw import disk
 from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 from skimage.filters import gabor_kernel
 from tqdm import tqdm
-import os
+
 
 def z_normalization(data: np.array, normalize=True) -> np.array:
     if normalize:
@@ -388,12 +390,14 @@ def apply_gabor_filters_and_extract_features(image, frequencies, thetas, sigmas)
 
     return feature_vector
 
+
 def load_image(image_path: str, BGR2RGB=True) -> np.ndarray:
     img = cv2.imread(image_path)
     if BGR2RGB:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     return img
+
 
 def extract_individual_features(df, original_folder_path):
     histograms_rgb, histograms_hsv, graycomatrix_features, Y = [], [], [], []
@@ -404,9 +408,9 @@ def extract_individual_features(df, original_folder_path):
 
         if os.path.exists(image_path):
             # Read the image using OpenCV
-            image_name = image_name.split('.')[0]
+            image_name = image_name.split(".")[0]
             if "augmented" in image_name:
-                image_name = image_name.split("_")[-2] +"_"+ image_name.split("_")[-1]
+                image_name = image_name.split("_")[-2] + "_" + image_name.split("_")[-1]
 
             image_rgb = load_image(image_path, BGR2RGB=True)
 
@@ -421,10 +425,16 @@ def extract_individual_features(df, original_folder_path):
             graycomatrix_features.append(calculate_glcm_features(image_rgb))
 
             # Append the label
-            cancer = df.loc[df['image_id'] == image_name, 'cancer'].values[0]
+            cancer = df.loc[df["image_id"] == image_name, "cancer"].values[0]
             Y.append(cancer)
 
-    return np.array(histograms_rgb), np.array(histograms_hsv), np.array(graycomatrix_features), np.array(Y)
+    return (
+        np.array(histograms_rgb),
+        np.array(histograms_hsv),
+        np.array(graycomatrix_features),
+        np.array(Y),
+    )
+
 
 def generate_feature_vector(train_vectors: list, test_vectors: list):
     def process_vectors(vectors):
