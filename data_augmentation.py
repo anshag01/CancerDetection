@@ -269,9 +269,11 @@ def move_pictures_up(directory):
             print(f"Warning: The directory {subfolder_path} does not exist or is not a directory.")
 
 
-def split_data_and_oversample(dataset_directory, processed_folder_path, labels_df, train_size=0.8, should_move_pictures_up=True):
+def split_data_and_oversample(dataset_directory, processed_folder_path, labels_df, train_size=0.8, should_move_pictures_up=True, oversample=False):
     split_data_with_labels(dataset_directory, processed_folder_path, labels_df, train_size)
-    oversample_train_data(os.path.join(processed_folder_path, "train"))
+
+    if oversample:
+        oversample_train_data(os.path.join(processed_folder_path, "train"))
 
     if should_move_pictures_up:
         for folder in os.listdir(processed_folder_path):
