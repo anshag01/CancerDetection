@@ -155,14 +155,27 @@ def crop_rotate(image, angle):
     return crop_image_to_size(oversample, w, h)
 
 
+def create_directories(path_list):
+    """Create directories for each path in the list."""
+    for path in path_list:
+        os.makedirs(path, exist_ok=True)
+
+def filter_files_in_directory(directory, extension=".jpg"):
+    """List files in directory with specific extension and return without extension."""
+    return [f.split(".")[0] for f in os.listdir(directory) if f.endswith(extension) and os.path.isfile(os.path.join(directory, f))]
+
+def copy_files(files, destination):
+    """Copy files to the specified destination."""
+    for file in files:
+        shutil.copy(file, destination)
+
 def split_data_with_labels(dataset_directory, processed_folder_path, labels_df, train_size=0.8):
     train_dir = os.path.join(processed_folder_path, 'train')
     test_dir = os.path.join(processed_folder_path, 'test')
-    os.makedirs(train_dir, exist_ok=True)
-    os.makedirs(test_dir, exist_ok=True)
+    create_directories([train_dir, test_dir])
 
-    files = [f.split(".")[-2] for f in os.listdir(dataset_directory) if os.path.isfile(os.path.join(dataset_directory, f))]
-    labels_df = labels_df[labels_df.image_id.isin(files)==True]
+    files = filter_files_in_directory(dataset_directory)
+    labels_df = labels_df[labels_df['image_id'].isin(files)]
 
     for class_label in labels_df['cancer'].unique():
         class_df = labels_df[labels_df['cancer'] == class_label]
@@ -172,69 +185,55 @@ def split_data_with_labels(dataset_directory, processed_folder_path, labels_df, 
 
         class_train_dir = os.path.join(train_dir, str(class_label))
         class_test_dir = os.path.join(test_dir, str(class_label))
-        os.makedirs(class_train_dir, exist_ok=True)
-        os.makedirs(class_test_dir, exist_ok=True)
+        create_directories([class_train_dir, class_test_dir])
 
-        for img in train_imgs:
-            shutil.copy(img, class_train_dir)
-        for img in test_imgs:
-            shutil.copy(img, class_test_dir)
-
+        copy_files(train_imgs, class_train_dir)
+        copy_files(test_imgs, class_test_dir)
 
 def oversample_train_data(train_directory):
     random.seed(42)
-
     elements_per_class = []
     class_labels = []
-    for class_folder in os.listdir(train_directory):
-        if class_folder.startswith("."):
-            continue
-        path = os.path.join(train_directory, class_folder) + "/"
-        class_labels.append(class_folder)
-        elements_per_class.append(len([f.split(".")[-2] for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]))
-
-    max_images = np.max(elements_per_class)
 
     for class_folder in os.listdir(train_directory):
-        # escape ./dstore on mac
-        if class_folder.startswith("."):
-            continue
+        class_path = os.path.join(train_directory, class_folder)
+        if os.path.isdir(class_path):
+            files = filter_files_in_directory(class_path)
+            class_labels.append(class_folder)
+            elements_per_class.append(len(files))
 
+    max_images = max(elements_per_class)
+    augment_images_in_classes(train_directory, class_labels, max_images)
+
+def augment_images_in_classes(train_directory, class_labels, max_images):
+    """Oversample training data by augmenting images within each class."""
+    for class_folder in class_labels:
         class_path = os.path.join(train_directory, class_folder)
         images = os.listdir(class_path)
-
-        original_images = images
+        original_images = [img for img in images if img.endswith('.jpg') and 'augmented' not in img]
 
         while len(images) < max_images:
-            image_to_augment = random.choice(original_images)
-            if not(image_to_augment.endswith(".jpg")):
-                continue
-            if "augmented" in image_to_augment:
-                continue
+            augment_and_save_image(class_path, original_images, images)
 
-            image_path = os.path.join(class_path, image_to_augment)
-            image_name_read = image_path.split("/")[-1]
+def augment_and_save_image(class_path, original_images, images):
+    """Augment an image with random rotation and save it."""
+    image_to_augument = random.choice(original_images)
+    image_path = os.path.join(class_path, image_to_augument)
+    angle = random_rotation_angle()
+    new_image = rotate_image(cv2.imread(image_path), angle)  # Assuming a rotate_image function exists
+    new_image_name = f"augmented_{angle:.0f}deg_{image_to_augument}"
+    new_image_path = os.path.join(class_path, new_image_name)
+    cv2.imwrite(new_image_path, new_image)
+    images.append(new_image_name)
 
-            #
-            # generate new image with random rotation
-            #
-
-            # Randomly choose between the two intervals
-            diff_angle = 15 # degree
-            interval = random.choice([(0, 0+diff_angle),
-                                      (90-diff_angle, 90+diff_angle),
-                                      (180-diff_angle, 180+diff_angle),
-                                      (270-diff_angle, 270+diff_angle),
-                                      (360-diff_angle, 360)])
-
-            # Generate and return a random number within the chosen interval
-            angle = random.uniform(interval[0], interval[1])
-
-            new_image = crop_rotate(methods.load_image(image_path, BGR2RGB=False), angle)
-
-            new_image_name = f"augmented_{angle:.0f}deg_{image_name_read}"
-            new_image_path = os.path.join(class_path, new_image_name)
-
-            os.chdir(class_path + "/")
-            cv2.imwrite(new_image_name, new_image)
-            images.append(new_image_path)  # Update list to include new image
+def random_rotation_angle():
+    """Generate a random rotation angle within predefined intervals."""
+    diff_angle = 15  # degree
+    intervals = [
+        (0, 0 + diff_angle),
+        (90 - diff_angle, 90 + diff_angle),
+        (180 - diff_angle, 180 + diff_angle),
+        (270 - diff_angle, 270 + diff_angle),
+        (360 - diff_angle, 360)
+    ]
+    return random.uniform(*random.choice(intervals))
