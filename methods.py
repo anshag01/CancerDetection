@@ -386,3 +386,12 @@ def apply_gabor_filters_and_extract_features(image, frequencies, thetas, sigmas)
         feature_vector.extend([mean_val, std_val, skew_val, kurt_val])
 
     return feature_vector
+
+def load_image(image_path: str, BGR2RGB=True) -> np.ndarray:
+    img = cv2.imread(image_path)
+    if BGR2RGB:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    return img
+
+
