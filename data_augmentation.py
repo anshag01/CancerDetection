@@ -238,7 +238,45 @@ def random_rotation_angle():
     ]
     return random.uniform(*random.choice(intervals))
 
-def split_data_and_oversample(dataset_directory, processed_folder_path, labels_df, train_size=0.8):
+def move_pictures_up(directory):
+    """
+    Moves pictures from 'True' and 'False' subdirectories up one level and removes the folders.
+
+    :param directory: The parent directory containing the 'True' and 'False' subdirectories.
+    """
+    # Define subfolders
+    subfolders = ['True', 'False']
+
+    for subfolder in subfolders:
+        subfolder_path = os.path.join(directory, subfolder)
+
+        # Check if the subfolder exists
+        if os.path.exists(subfolder_path) and os.path.isdir(subfolder_path):
+            # List all files in the subfolder
+            for filename in os.listdir(subfolder_path):
+                file_path = os.path.join(subfolder_path, filename)
+
+                # Move each file up one level (to the directory)
+                if os.path.isfile(file_path):
+                    shutil.move(file_path, directory)
+
+            # After moving all files, try to remove the subfolder
+            try:
+                os.rmdir(subfolder_path)
+            except OSError as e:
+                print(f"Error: {subfolder_path} could not be removed. It may not be empty.")
+        else:
+            print(f"Warning: The directory {subfolder_path} does not exist or is not a directory.")
+
+
+def split_data_and_oversample(dataset_directory, processed_folder_path, labels_df, train_size=0.8, should_move_pictures_up=True):
     split_data_with_labels(dataset_directory, processed_folder_path, labels_df, train_size)
     oversample_train_data(os.path.join(processed_folder_path, "train"))
 
+    if should_move_pictures_up:
+        for folder in os.listdir(processed_folder_path):
+            if folder.startswith("."):
+                continue
+
+            path_ = os.path.join(processed_folder_path, folder) + "/"
+            move_pictures_up(path_)
