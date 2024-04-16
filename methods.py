@@ -13,13 +13,15 @@ from skimage.filters import gabor_kernel
 from tqdm import tqdm
 
 
-def z_normalization(data: np.array, normalize=True) -> np.array:
+def z_normalization(image: np.array, normalize=True) -> np.array:
     if normalize:
-        mean = np.mean(data)
-        std_dev = np.std(data)
-        return (data - mean) / std_dev
-    else:
-        return data
+        mean = np.mean(image, axis=(0, 1))
+        std_dev = np.std(image, axis=(0, 1))
+        if np.any(std_dev > 0):
+            normalized_image = (image - mean) / std_dev
+        else:
+            normalized_image = image - mean
+        return normalized_image
 
 
 def convert_grayscale(image_path):
@@ -35,8 +37,7 @@ def convert_rgb(image_path):
     """
     img = cv2.imread(image_path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    normalised_img = img / 255.0
-    return normalised_img
+    return img
 
 
 def color_distribution(img):
