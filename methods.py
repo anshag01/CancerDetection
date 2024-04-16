@@ -12,14 +12,12 @@ from skimage.filters import gabor_kernel
 
 def z_normalization(image: np.array, normalize=True) -> np.array:
     if normalize:
-        #Calculate Mean and std dev for each channel
         mean = np.mean(image, axis=(0, 1))
         std_dev = np.std(image, axis=(0, 1))
         if np.any(std_dev > 0):
             normalized_image = (image - mean) / std_dev
         else:
             normalized_image = image - mean
-    
         return normalized_image
 
 
