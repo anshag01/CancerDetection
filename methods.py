@@ -1,3 +1,5 @@
+import os
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,6 +10,7 @@ from skimage import color, feature
 from skimage.draw import disk
 from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 from skimage.filters import gabor_kernel
+from tqdm import tqdm
 
 
 def z_normalization(image: np.array, normalize=True) -> np.array:
@@ -62,7 +65,7 @@ def create_rgb_histogram(img):
 
 def create_histogram(image, color_space="RGB"):
     """
-    :param img: cv2 RGB imput image
+    :param image: cv2 RGB input image
     :return: Create one RGB histogram based on the distribution of the image.
     """
 
@@ -236,7 +239,7 @@ def detect_significant_blob(image, plot_image=False, plot_chosen_transformation=
 
     :param image: cv2 in RGB (!) format
     :param plot_image: produce plot of detected blob overlayed on input image
-    :param plot_chosen_transformation: if chosen the trasformed image is plotted (i.e., saturation channel)
+    :param plot_chosen_transformation: if chosen the transformed image is plotted (i.e., saturation channel)
     :return: (y, x, r) of detected blob
     """
 
@@ -387,3 +390,69 @@ def apply_gabor_filters_and_extract_features(image, frequencies, thetas, sigmas)
         feature_vector.extend([mean_val, std_val, skew_val, kurt_val])
 
     return feature_vector
+
+
+def load_image(image_path: str, BGR2RGB=True) -> np.ndarray:
+    img = cv2.imread(image_path)
+    if BGR2RGB:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    return img
+
+
+def extract_individual_features(df, original_folder_path):
+    histograms_rgb, histograms_hsv, graycomatrix_features, Y = [], [], [], []
+
+    for image_name in tqdm(os.listdir(original_folder_path)):
+
+        image_path = os.path.join(original_folder_path, image_name)
+
+        if os.path.exists(image_path):
+            # Read the image using OpenCV
+            image_name = image_name.split(".")[0]
+            if "augmented" in image_name:
+                image_name = image_name.split("_")[-2] + "_" + image_name.split("_")[-1]
+
+            image_rgb = load_image(image_path, BGR2RGB=True)
+
+            # Feature Extraction
+            # Histograms
+            hist_rgb = create_histogram(image_rgb, color_space="RGB")
+            hist_hsv = create_histogram(image_rgb, color_space="HSV")
+            histograms_rgb.append(hist_rgb)
+            histograms_hsv.append(hist_hsv)
+
+            # Structure: GLCM Matrix
+            graycomatrix_features.append(calculate_glcm_features(image_rgb))
+
+            # Append the label
+            cancer = df.loc[df["image_id"] == image_name, "cancer"].values[0]
+            Y.append(cancer)
+
+    return (
+        np.array(histograms_rgb),
+        np.array(histograms_hsv),
+        np.array(graycomatrix_features),
+        np.array(Y),
+    )
+
+
+def generate_feature_vector(train_vectors: list, test_vectors: list):
+    def process_vectors(vectors):
+        x_combined = np.array([])
+
+        for vec in vectors:
+            if vec.ndim == 3:
+                vec = vec.reshape(vec.shape[0], -1)
+
+            if len(x_combined) == 0:
+                x_combined = vec
+            else:
+                x_combined = np.concatenate((x_combined, vec), axis=1)
+
+        return x_combined
+
+    x_train = process_vectors(train_vectors)
+    x_test = process_vectors(test_vectors)
+
+    return x_train, x_test
