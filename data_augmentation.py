@@ -255,39 +255,53 @@ def random_rotation_angle():
     return random.uniform(*random.choice(intervals))
 
 
-def move_pictures_up(directory):
-    """
-    Moves pictures from 'True' and 'False' subdirectories up one level and removes the folders.
+def move_images_up(start_path, levels_up=2):
+    # Check if the levels_up parameter is valid
+    if levels_up not in (0, 1, 2):
+        raise ValueError("levels_up must be 0, 1 or 2")
 
-    :param directory: The parent directory containing the 'True' and 'False' subdirectories.
-    """
-    # Define subfolders
-    subfolders = ["True", "False"]
+    if levels_up == 0:
+        return
 
-    for subfolder in subfolders:
-        subfolder_path = os.path.join(directory, subfolder)
+    # Ensure the path is absolute to maintain consistent depth calculation
+    start_path = os.path.abspath(start_path)
 
-        # Check if the subfolder exists
-        if os.path.exists(subfolder_path) and os.path.isdir(subfolder_path):
-            # List all files in the subfolder
-            for filename in os.listdir(subfolder_path):
-                file_path = os.path.join(subfolder_path, filename)
+    # List to store directories to potentially delete
+    directories_to_check = []
 
-                # Move each file up one level (to the directory)
-                if os.path.isfile(file_path):
-                    shutil.move(file_path, directory)
+    # Process each directory and subdirectory at the given start path
+    for root, dirs, files in os.walk(start_path, topdown=False):  # Note: topdown=False for later deletion
+        # Calculate how deep the current root is relative to start_path
+        depth = root[len(start_path):].count(os.sep)
 
-            # After moving all files, try to remove the subfolder
-            try:
-                os.rmdir(subfolder_path)
-            except OSError:
-                print(
-                    f"Error: {subfolder_path} could not be removed. It may not be empty."
-                )
-        else:
-            print(
-                f"Warning: The directory {subfolder_path} does not exist or is not a directory."
-            )
+        # Check if the depth is at least 'levels_up'
+        if depth >= levels_up:
+            # Process each file in the directory
+            for file in files:
+                # Assuming we're moving image files with these extensions
+                if file.endswith((".png", ".jpg", ".jpeg")):
+                    current_file_path = os.path.join(root, file)
+                    # Determine new file path by ascending 'levels_up' directories from the current root
+                    new_file_directory = root
+                    for _ in range(levels_up):
+                        new_file_directory = os.path.dirname(new_file_directory)
+                    new_file_path = os.path.join(new_file_directory, file)
+                    try:
+                        shutil.move(current_file_path, new_file_path)  # Move the file
+                    except shutil.Error as e:
+                        print(f"Error moving {current_file_path} to {new_file_path}: {e}")
+
+        # Add directory to check list for potential deletion
+        directories_to_check.append(root)
+
+    # Delete empty directories after all file moves are complete
+    for directory in directories_to_check:
+        try:
+            os.rmdir(directory)  # This will only delete empty directories
+        except OSError as e:
+            pass
+            # If the directory is not empty, an OSError is raised
+            # print(f"Failed to delete {directory}: {e}")
 
 
 def split_data_and_oversample(
@@ -295,7 +309,7 @@ def split_data_and_oversample(
     processed_folder_path,
     labels_df,
     train_size=0.8,
-    should_move_pictures_up=True,
+    move_picture_up_levels=1,
     oversample=False,
 ):
     split_data_with_labels(
@@ -303,12 +317,8 @@ def split_data_and_oversample(
     )
 
     if oversample:
-        oversample_train_data(os.path.join(processed_folder_path, "train"))
+        oversample_train_data(os.path.join(processed_folder_path + "/", "train"))
 
-    if should_move_pictures_up:
-        for folder in os.listdir(processed_folder_path):
-            if folder.startswith("."):
-                continue
+    move_images_up(processed_folder_path, move_picture_up_levels)
 
-            path_ = os.path.join(processed_folder_path, folder) + "/"
-            move_pictures_up(path_)
+
