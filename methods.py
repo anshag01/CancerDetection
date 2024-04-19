@@ -8,7 +8,7 @@ from scipy.ndimage import convolve
 from scipy.stats import kurtosis, skew
 from skimage import color, feature
 from skimage.draw import disk
-# from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
+from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 from skimage.filters import gabor_kernel
 from tqdm import tqdm
 
@@ -125,204 +125,204 @@ def classify_shapes(contour):
         return "irregular"
 
 
-# def lbp_features(image_path, radius=1, n_points=8, method="uniform"):
-#     image = cv2.imread(image_path)
-#     if len(image.shape) > 2:
-#         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-#     lbp = local_binary_pattern(image, n_points, radius, method)
-#
-#     hist, _ = np.histogram(
-#         lbp.ravel(), bins=np.arange(0, n_points + 3), range=(0, n_points + 2)
-#     )
-#     hist = hist.astype("float")
-#     hist /= hist.sum() + 1e-7
-#
-#     return hist
+def lbp_features(image_path, radius=1, n_points=8, method="uniform"):
+    image = cv2.imread(image_path)
+    if len(image.shape) > 2:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    lbp = local_binary_pattern(image, n_points, radius, method)
+
+    hist, _ = np.histogram(
+        lbp.ravel(), bins=np.arange(0, n_points + 3), range=(0, n_points + 2)
+    )
+    hist = hist.astype("float")
+    hist /= hist.sum() + 1e-7
+
+    return hist
 
 
-# def calculate_glcm_features_for_blob(gray_image, blob):
-#     """
-#     Function to calculate GLCM features for a specific region (blob) in the image
-#
-#     :param gray_image:
-#     :param blob:
-#     :return: feature vector
-#     """
-#     y, x, r = blob
-#
-#     # generate a mask for the blob area
-#     rr, cc = disk((y, x), r, shape=gray_image.shape)
-#     mask = np.zeros_like(gray_image, dtype=bool)
-#     mask[rr, cc] = True
-#
-#     # use the mask to select the region of interest
-#     blob_region = gray_image[mask]
-#
-#     # compute the GLCM for the selected region
-#     roi_image = np.zeros_like(gray_image)
-#     roi_image[rr, cc] = blob_region
-#
-#     # compute the GLCM
-#     glcm = graycomatrix(
-#         roi_image,
-#         distances=[1, 2, 3],
-#         angles=[0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
-#         symmetric=True,
-#         normed=True,
-#     )
-#
-#     # feature extraction
-#     properties = [
-#         "contrast",
-#         "dissimilarity",
-#         "homogeneity",
-#         "energy",
-#         "correlation",
-#         "ASM",
-#     ]
-#
-#     feature_vector = []
-#     for prop in properties:
-#         # Flatten to convert from 2D to 1D
-#         temp = graycoprops(glcm, prop).flatten()
-#
-#         # Taking mean across different angles
-#         feature_vector.append(np.mean(temp))
-#
-#     return feature_vector
+def calculate_glcm_features_for_blob(gray_image, blob):
+    """
+    Function to calculate GLCM features for a specific region (blob) in the image
+
+    :param gray_image:
+    :param blob:
+    :return: feature vector
+    """
+    y, x, r = blob
+
+    # generate a mask for the blob area
+    rr, cc = disk((y, x), r, shape=gray_image.shape)
+    mask = np.zeros_like(gray_image, dtype=bool)
+    mask[rr, cc] = True
+
+    # use the mask to select the region of interest
+    blob_region = gray_image[mask]
+
+    # compute the GLCM for the selected region
+    roi_image = np.zeros_like(gray_image)
+    roi_image[rr, cc] = blob_region
+
+    # compute the GLCM
+    glcm = graycomatrix(
+        roi_image,
+        distances=[1, 2, 3],
+        angles=[0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
+        symmetric=True,
+        normed=True,
+    )
+
+    # feature extraction
+    properties = [
+        "contrast",
+        "dissimilarity",
+        "homogeneity",
+        "energy",
+        "correlation",
+        "ASM",
+    ]
+
+    feature_vector = []
+    for prop in properties:
+        # Flatten to convert from 2D to 1D
+        temp = graycoprops(glcm, prop).flatten()
+
+        # Taking mean across different angles
+        feature_vector.append(np.mean(temp))
+
+    return feature_vector
 
 
-# def calculate_glcm_features(image: np.ndarray) -> list:
-#     """
-#     Compute the Gray-Level Co-Occurrence Matrix (GLCM)
-#
-#     :param image:
-#     :return: feature vector
-#     """
-#     gray_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-#
-#     # Normalize pixel values to 0 - 255
-#     gray_image = np.uint8(
-#         (gray_image - gray_image.min()) / (gray_image.max() - gray_image.min()) * 255
-#     )
-#
-#     glcm = graycomatrix(
-#         gray_image,
-#         distances=[1, 2, 3],
-#         angles=[0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
-#         symmetric=True,
-#         normed=True,
-#     )
-#
-#     # Feature extraction
-#     properties = [
-#         "contrast",
-#         "dissimilarity",
-#         "homogeneity",
-#         "energy",
-#         "correlation",
-#         "ASM",
-#     ]
-#     feature_vector = []
-#
-#     for prop in properties:
-#         temp = graycoprops(glcm, prop).flatten()  # Flatten to convert from 2D to 1D
-#         feature_vector.append(np.mean(temp))  # Taking mean across different angles
-#
-#     return feature_vector
+def calculate_glcm_features(image: np.ndarray) -> list:
+    """
+    Compute the Gray-Level Co-Occurrence Matrix (GLCM)
+
+    :param image:
+    :return: feature vector
+    """
+    gray_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+    # Normalize pixel values to 0 - 255
+    gray_image = np.uint8(
+        (gray_image - gray_image.min()) / (gray_image.max() - gray_image.min()) * 255
+    )
+
+    glcm = graycomatrix(
+        gray_image,
+        distances=[1, 2, 3],
+        angles=[0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
+        symmetric=True,
+        normed=True,
+    )
+
+    # Feature extraction
+    properties = [
+        "contrast",
+        "dissimilarity",
+        "homogeneity",
+        "energy",
+        "correlation",
+        "ASM",
+    ]
+    feature_vector = []
+
+    for prop in properties:
+        temp = graycoprops(glcm, prop).flatten()  # Flatten to convert from 2D to 1D
+        feature_vector.append(np.mean(temp))  # Taking mean across different angles
+
+    return feature_vector
 
 
-# def detect_significant_blob(image, plot_image=False, plot_chosen_transformation=False):
-#     """
-#     Loosely based on https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_blob.html
-#     Goal: detect a significant circular blob inside an image
-#
-#     :param image: cv2 in RGB (!) format
-#     :param plot_image: produce plot of detected blob overlayed on input image
-#     :param plot_chosen_transformation: if chosen the transformed image is plotted (i.e., saturation channel)
-#     :return: (y, x, r) of detected blob
-#     """
-#
-#     # transformed_image = color.rgb2gray(image)
-#     transformed_image = color.rgb2hsv(image)[
-#         :, :, 1
-#     ]  # extract the hue channel or the channel of interest
-#     transformed_image = (transformed_image - np.min(transformed_image)) / (
-#         np.max(transformed_image) - np.min(transformed_image)
-#     )
-#
-#     # detect blobs using transformed image
-#     blobs = []
-#     i = 0
-#     threshold = 0.02
-#     decrement = 0.95
-#     max_sigma = 500  # tweak these values a bit
-#     height, width = transformed_image.shape[:2]
-#
-#     while len(blobs) <= 3:
-#         blobs = feature.blob_doh(
-#             transformed_image, max_sigma=max_sigma, threshold=threshold
-#         )
-#         i += 1
-#         max_sigma *= 0.97
-#         threshold *= decrement
-#
-#         # select only the blobs that are fully inside the image
-#         blobs = np.array(
-#             [
-#                 (y, x, r)
-#                 for (y, x, r) in blobs
-#                 if (r > 40 and x > 0 and y > 0 and r < max_sigma)
-#                 or (
-#                     y - r >= 0
-#                     and x - r >= 0
-#                     and r >= 10
-#                     and y + r <= height
-#                     and x + r <= width
-#                 )
-#             ]
-#         )
-#         if i == 50:
-#             break
-#
-#     if blobs.size == 0:
-#         print("No blobs detected.")
-#         blobs = [(height / 2, width / 2, 150)]
-#
-#     calculate_stds_within_blob = []
-#     cost_fct = []
-#     plot_blobs = []
-#
-#     for blob in blobs:
-#         y, x, r = blob
-#         c = plt.Circle((x, y), 1 * r, color="w", linestyle=":", linewidth=2, fill=False)
-#
-#         # if multiple patches should be plotted
-#         plot_blobs.append(c)
-#
-#         std_in_blob = calculate_std_within_blob(transformed_image, blob)
-#         cost_fct.append(std_in_blob * r)
-#         calculate_stds_within_blob.append(std_in_blob)
-#
-#     # calculate the cost function of the image inside the blob -> we want to
-#     # select the largest one
-#     significant_blob = blobs[np.argmax(cost_fct)]
-#
-#     y, x, r = significant_blob
-#     c = plt.Circle((x, y), 1 * r, color="r", linewidth=3, fill=False)
-#     plot_blobs.append(c)
-#     if plot_image:
-#         fig, ax = plt.subplots(1, 1)
-#
-#         for c in plot_blobs:
-#             ax.add_patch(c)
-#
-#         ax.imshow(image)
-#         if plot_chosen_transformation:
-#             ax.imshow(transformed_image, cmap=plt.cm.gray)
-#         plt.show()
-#
-#     return significant_blob
+def detect_significant_blob(image, plot_image=False, plot_chosen_transformation=False):
+    """
+    Loosely based on https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_blob.html
+    Goal: detect a significant circular blob inside an image
+
+    :param image: cv2 in RGB (!) format
+    :param plot_image: produce plot of detected blob overlayed on input image
+    :param plot_chosen_transformation: if chosen the transformed image is plotted (i.e., saturation channel)
+    :return: (y, x, r) of detected blob
+    """
+
+    # transformed_image = color.rgb2gray(image)
+    transformed_image = color.rgb2hsv(image)[
+        :, :, 1
+    ]  # extract the hue channel or the channel of interest
+    transformed_image = (transformed_image - np.min(transformed_image)) / (
+        np.max(transformed_image) - np.min(transformed_image)
+    )
+
+    # detect blobs using transformed image
+    blobs = []
+    i = 0
+    threshold = 0.02
+    decrement = 0.95
+    max_sigma = 500  # tweak these values a bit
+    height, width = transformed_image.shape[:2]
+
+    while len(blobs) <= 3:
+        blobs = feature.blob_doh(
+            transformed_image, max_sigma=max_sigma, threshold=threshold
+        )
+        i += 1
+        max_sigma *= 0.97
+        threshold *= decrement
+
+        # select only the blobs that are fully inside the image
+        blobs = np.array(
+            [
+                (y, x, r)
+                for (y, x, r) in blobs
+                if (r > 40 and x > 0 and y > 0 and r < max_sigma)
+                or (
+                    y - r >= 0
+                    and x - r >= 0
+                    and r >= 10
+                    and y + r <= height
+                    and x + r <= width
+                )
+            ]
+        )
+        if i == 50:
+            break
+
+    if blobs.size == 0:
+        print("No blobs detected.")
+        blobs = [(height / 2, width / 2, 150)]
+
+    calculate_stds_within_blob = []
+    cost_fct = []
+    plot_blobs = []
+
+    for blob in blobs:
+        y, x, r = blob
+        c = plt.Circle((x, y), 1 * r, color="w", linestyle=":", linewidth=2, fill=False)
+
+        # if multiple patches should be plotted
+        plot_blobs.append(c)
+
+        std_in_blob = calculate_std_within_blob(transformed_image, blob)
+        cost_fct.append(std_in_blob * r)
+        calculate_stds_within_blob.append(std_in_blob)
+
+    # calculate the cost function of the image inside the blob -> we want to
+    # select the largest one
+    significant_blob = blobs[np.argmax(cost_fct)]
+
+    y, x, r = significant_blob
+    c = plt.Circle((x, y), 1 * r, color="r", linewidth=3, fill=False)
+    plot_blobs.append(c)
+    if plot_image:
+        fig, ax = plt.subplots(1, 1)
+
+        for c in plot_blobs:
+            ax.add_patch(c)
+
+        ax.imshow(image)
+        if plot_chosen_transformation:
+            ax.imshow(transformed_image, cmap=plt.cm.gray)
+        plt.show()
+
+    return significant_blob
 
 
 def calculate_std_within_blob(image_channel, blob):
@@ -400,41 +400,41 @@ def load_image(image_path: str, BGR2RGB=True) -> np.ndarray:
     return img
 
 
-# def extract_individual_features(df, original_folder_path):
-#     histograms_rgb, histograms_hsv, graycomatrix_features, Y = [], [], [], []
-#
-#     for image_name in tqdm(os.listdir(original_folder_path)):
-#
-#         image_path = os.path.join(original_folder_path, image_name)
-#
-#         if os.path.exists(image_path):
-#             # Read the image using OpenCV
-#             image_name = image_name.split(".")[0]
-#             if "augmented" in image_name:
-#                 image_name = image_name.split("_")[-2] + "_" + image_name.split("_")[-1]
-#
-#             image_rgb = load_image(image_path, BGR2RGB=True)
-#
-#             # Feature Extraction
-#             # Histograms
-#             hist_rgb = create_histogram(image_rgb, color_space="RGB")
-#             hist_hsv = create_histogram(image_rgb, color_space="HSV")
-#             histograms_rgb.append(hist_rgb)
-#             histograms_hsv.append(hist_hsv)
-#
-#             # Structure: GLCM Matrix
-#             graycomatrix_features.append(calculate_glcm_features(image_rgb))
-#
-#             # Append the label
-#             cancer = df.loc[df["image_id"] == image_name, "cancer"].values[0]
-#             Y.append(cancer)
-#
-#     return (
-#         np.array(histograms_rgb),
-#         np.array(histograms_hsv),
-#         np.array(graycomatrix_features),
-#         np.array(Y),
-#     )
+def extract_individual_features(df, original_folder_path):
+    histograms_rgb, histograms_hsv, graycomatrix_features, Y = [], [], [], []
+
+    for image_name in tqdm(os.listdir(original_folder_path)):
+
+        image_path = os.path.join(original_folder_path, image_name)
+
+        if os.path.exists(image_path):
+            # Read the image using OpenCV
+            image_name = image_name.split(".")[0]
+            if "augmented" in image_name:
+                image_name = image_name.split("_")[-2] + "_" + image_name.split("_")[-1]
+
+            image_rgb = load_image(image_path, BGR2RGB=True)
+
+            # Feature Extraction
+            # Histograms
+            hist_rgb = create_histogram(image_rgb, color_space="RGB")
+            hist_hsv = create_histogram(image_rgb, color_space="HSV")
+            histograms_rgb.append(hist_rgb)
+            histograms_hsv.append(hist_hsv)
+
+            # Structure: GLCM Matrix
+            graycomatrix_features.append(calculate_glcm_features(image_rgb))
+
+            # Append the label
+            cancer = df.loc[df["image_id"] == image_name, "cancer"].values[0]
+            Y.append(cancer)
+
+    return (
+        np.array(histograms_rgb),
+        np.array(histograms_hsv),
+        np.array(graycomatrix_features),
+        np.array(Y),
+    )
 
 
 def generate_feature_vector(train_vectors: list, test_vectors: list):
