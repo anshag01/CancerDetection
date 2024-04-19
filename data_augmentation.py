@@ -270,9 +270,11 @@ def move_images_up(start_path, levels_up=2):
     directories_to_check = []
 
     # Process each directory and subdirectory at the given start path
-    for root, dirs, files in os.walk(start_path, topdown=False):  # Note: topdown=False for later deletion
+    for root, dirs, files in os.walk(
+        start_path, topdown=False
+    ):  # Note: topdown=False for later deletion
         # Calculate how deep the current root is relative to start_path
-        depth = root[len(start_path):].count(os.sep)
+        depth = root[len(start_path) :].count(os.sep)
 
         # Check if the depth is at least 'levels_up'
         if depth >= levels_up:
@@ -289,7 +291,9 @@ def move_images_up(start_path, levels_up=2):
                     try:
                         shutil.move(current_file_path, new_file_path)  # Move the file
                     except shutil.Error as e:
-                        print(f"Error moving {current_file_path} to {new_file_path}: {e}")
+                        print(
+                            f"Error moving {current_file_path} to {new_file_path}: {e}"
+                        )
 
         # Add directory to check list for potential deletion
         directories_to_check.append(root)
@@ -298,7 +302,7 @@ def move_images_up(start_path, levels_up=2):
     for directory in directories_to_check:
         try:
             os.rmdir(directory)  # This will only delete empty directories
-        except OSError as e:
+        except OSError:
             pass
             # If the directory is not empty, an OSError is raised
             # print(f"Failed to delete {directory}: {e}")
@@ -320,5 +324,3 @@ def split_data_and_oversample(
         oversample_train_data(os.path.join(processed_folder_path + "/", "train"))
 
     move_images_up(processed_folder_path, move_picture_up_levels)
-
-
