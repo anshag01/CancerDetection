@@ -12,8 +12,11 @@ from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 from skimage.filters import gabor_kernel
 from tqdm import tqdm
 
+
 def get_labels(repo_dir):
-    label = pd.read_csv(os.path.join(repo_dir, "dataverse_files/", "HAM10000_metadata.csv"))
+    label = pd.read_csv(
+        os.path.join(repo_dir, "dataverse_files/", "HAM10000_metadata.csv")
+    )
 
     # label = label.set_index('image_id')
     cancerous = ["akiec", "bcc", "mel"]
@@ -23,6 +26,7 @@ def get_labels(repo_dir):
     label.loc[label["dx"].isin(non_cancerous), "cancer"] = False
 
     return label
+
 
 def z_normalization(image: np.array, normalize=True) -> np.array:
     if normalize:

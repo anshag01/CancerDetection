@@ -1,11 +1,11 @@
 import os
 
+import numpy as np
 import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset
 
 import methods
-import numpy as np
 
 
 class ImageDataset(Dataset):
