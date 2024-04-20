@@ -5,6 +5,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 import methods
+import numpy as np
 
 
 class ImageDataset(Dataset):
@@ -73,3 +74,44 @@ def merge_features_with_labels(
         merged_data.to_csv(export_path)
 
     return merged_data
+
+
+def not_oversampled_images(features_dataframe: pd.DataFrame) -> list[bool]:
+    """
+    Generate a list indicating whether each image in the dataframe should be included
+    in testing based on whether it has been augmented.
+
+    :param features_dataframe: A DataFrame containing image metadata with columns 'filename' and 'image_id'.
+    :return: A list of booleans where True indicates the image has not been augmented,
+                and False indicates it has.
+    """
+
+    # Extract augmented image IDs
+    augmented_ids = set(
+        "_".join(
+            filename.split("_")[-2:]
+        )  # Assuming the ID is in the last two parts of the filename
+        for filename in features_dataframe.filename
+        if "augmented" in filename
+    )
+
+    # Determine inclusion in testing for each image
+    include_in_testing = [
+        image_id not in augmented_ids for image_id in features_dataframe.image_id
+    ]
+
+    return include_in_testing
+
+
+def calculate_test_size(dataframe, test_size, include_in_testing):
+    """
+    Calculate the adjusted test size for splitting the dataset, excluding oversampled entries.
+
+    :param dataframe: The complete dataframe.
+    :param test_size: The desired proportion of the test set size relative to the unique images.
+    :param include_in_testing: Boolean array indicating which images are not oversampled.
+    :return: Adjusted test size.
+    """
+    unique_image_count = len(np.unique(dataframe.image_id))
+    valid_image_count = np.sum(include_in_testing)
+    return test_size * unique_image_count / valid_image_count
