@@ -175,7 +175,9 @@ def plot_low_dim_components(
         c="blue",
         label="Non-Cancerous",
         alpha=0.5,
-    )  # Non-cancerous in blue
+    )
+
+    # Non-cancerous in blue
     plt.scatter(
         x_train_low_dim[y_train == 1, component_1],
         x_train_low_dim[y_train == 1, component_2],
