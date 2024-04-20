@@ -438,11 +438,13 @@ class ImageHeuristicFeatureExtractor:
 
             image_path = os.path.join(self.data_folder_path, image_name)
             if os.path.exists(image_path):
-                clean_image_name = image_name.split(".")[0]
-                self.list_filenames.append(clean_image_name)
+                filename = image_name.split(".")[0]
+                self.list_filenames.append(filename)
 
-                if "augmented" in clean_image_name:
-                    clean_image_name = "_".join(clean_image_name.split("_")[-2:])
+                if "augmented" in filename:
+                    clean_image_name = "_".join(filename.split("_")[-2:])
+                else:
+                    clean_image_name = filename
 
                 self.list_images.append(clean_image_name)
 
@@ -452,7 +454,6 @@ class ImageHeuristicFeatureExtractor:
         return self.merge_features()
 
     def load_image(self, image_path: str):
-        # Placeholder for actual image loading logic
         return load_image(image_path, BGR2RGB=True)
 
     def process_image(self, image_rgb):
@@ -462,22 +463,29 @@ class ImageHeuristicFeatureExtractor:
         #self.gabor_features.append(apply_gabor_filters_and_extract_features(image_rgb, GABOR_FREQUENCIES, GABOR_THETAS, GABOR_SIGMAS))
 
     def merge_features(self):
-        df_rgb = pd.merge(pd.DataFrame(np.array(self.histograms_rgb).reshape(len(self.histograms_rgb), -1), index=self.list_images), self.label.set_index("image_id"), left_index=True, right_index=True)
-        df_hsv = pd.merge(pd.DataFrame(np.array(self.histograms_hsv).reshape(len(self.histograms_hsv), -1), index=self.list_images), self.label.set_index("image_id"), left_index=True, right_index=True)
-        df_glcm = pd.merge(pd.DataFrame(np.array(self.graycomatrix_features), index=self.list_images), self.label.set_index("image_id"), left_index=True, right_index=True)
 
-        df_rgb["filename"] = self.list_filenames
-        df_hsv["filename"] = self.list_filenames
-        df_glcm["filename"] = self.list_filenames
+        tmp_rgb = pd.DataFrame(pd.DataFrame(np.array(self.histograms_rgb).reshape(len(self.histograms_rgb), -1), index=self.list_images))
+        tmp_rgb["filename"] = self.list_filenames
+        tmp_rgb["image_id"] = self.list_images
 
-        df_rgb["image_id"] = self.list_images
-        df_hsv["image_id"] = self.list_images
-        df_glcm["image_id"] = self.list_images
+        tmp_hsv = pd.DataFrame(pd.DataFrame(np.array(self.histograms_hsv).reshape(len(self.histograms_hsv), -1), index=self.list_images))
+        tmp_hsv["filename"] = self.list_filenames
+        tmp_hsv["image_id"] = self.list_images
+
+        tmp_glcm = pd.DataFrame(np.array(self.graycomatrix_features), index=self.list_images)
+        tmp_glcm["filename"] = self.list_filenames
+        tmp_glcm["image_id"] = self.list_images
+
+        df_rgb = pd.merge(tmp_rgb, self.label, left_index=True, right_index=True)
+        df_hsv = pd.merge(tmp_hsv, self.label, left_index=True, right_index=True)
+        df_glcm = pd.merge(tmp_glcm, self.label, left_index=True, right_index=True)
 
         try:
-            df_gabor = pd.merge(pd.DataFrame(np.array(self.gabor_features), index=self.list_images), self.label.set_index("image_id"), left_index=True, right_index=True)
-            df_gabor["filename"] = self.list_filenames
-            df_gabor["image_id"] = self.list_images
+            tmp_gabor = pd.DataFrame(np.array(self.gabor_features), index=self.list_images)
+            tmp_gabor["filename"] = self.list_filenames
+            tmp_gabor["image_id"] = self.list_images
+
+            df_gabor = pd.merge(tmp_gabor, self.label, left_index=True, right_index=True)
         except ValueError:
             df_gabor = pd.DataFrame()
 
@@ -500,6 +508,9 @@ class ImageHeuristicFeatureExtractor:
 
     def return_one_df(self):
         return self.df
+
+    def return_list_filenames(self):
+        return self.list_filenames
 
 
 def standardize_features(features: np.ndarray, use_pca: bool = False, n_components: int = None):
