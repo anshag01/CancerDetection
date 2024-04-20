@@ -1,19 +1,21 @@
 import os
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from PIL import Image
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+)
 from torch.utils.data import Dataset
 
 import methods
 
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-import matplotlib.pyplot as plt
-
-
-from sklearn import datasets
-from sklearn.manifold import TSNE
 
 class ImageDataset(Dataset):
     def __init__(self, directory, transform=None):
@@ -37,6 +39,7 @@ class ImageDataset(Dataset):
         image_tensor = self.transform(image) if self.transform else image
         key = os.path.basename(image_path).removesuffix(".jpg").removesuffix(".png")
         return key, image_tensor
+
 
 def extract_image_ids(filenames: list) -> pd.DataFrame:
     """Extract image IDs from filenames assuming format includes ID as the last two underscore-separated parts."""
@@ -65,12 +68,12 @@ def merge_features_with_labels(
 
     label_data = temp_files.merge(labels_df, on="image_id", how="left")
 
-
     merged_data = features.merge(label_data, left_index=True, right_on="image_id")
 
     if export:
         export_path = os.path.join(
-            os.path.dirname(features_path), features_path.split(".")[-2].split("/")[-1] +  "_pandas.csv"
+            os.path.dirname(features_path),
+            features_path.split(".")[-2].split("/")[-1] + "_pandas.csv",
         )
         merged_data.to_csv(export_path)
 
@@ -118,7 +121,6 @@ def calculate_test_size(dataframe, test_size, include_in_testing):
     return test_size * unique_image_count / valid_image_count
 
 
-
 def calculate_metrics(y_test, y_pred):
     """
     Calculates and prints the accuracy, precision, recall, and F1 score for the given test labels and predictions.
@@ -136,8 +138,6 @@ def calculate_metrics(y_test, y_pred):
     print(f"Precision: {precision}")
     print(f"Recall: {recall}")
     print(f"F1 Score: {f1}")
-
-
 
 
 def plot_confusion_matrix(y_test, y_pred, print_metrics=True):
@@ -162,7 +162,10 @@ def plot_confusion_matrix(y_test, y_pred, print_metrics=True):
     plt.title("Confusion Matrix")
     plt.show()
 
-def plot_low_dim_components(x_train_low_dim, y_train, label="PCA", component_1=0, component_2=1):
+
+def plot_low_dim_components(
+    x_train_low_dim, y_train, label="PCA", component_1=0, component_2=1
+):
     # Scatter plot of the first two PCA components
     # Here, X_pca[:, 0] is the first component, X_pca[:, 1] is the second component
     plt.figure(figsize=(10, 7))
