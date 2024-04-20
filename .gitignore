@@ -11,3 +11,5 @@ figures/
 .idea/
 
 preprocessed_images_10k_rotated/
+
+features_extracted/
