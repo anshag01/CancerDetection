@@ -11,7 +11,27 @@ from skimage.draw import disk
 from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 from skimage.filters import gabor_kernel
 from tqdm import tqdm
+import cv2
+import numpy as np
+import scipy.ndimage
+from scipy.stats import skew, kurtosis
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 
+import numpy as np
+import matplotlib.pyplot as plt
+from skimage import io, color
+from skimage.filters import gabor_kernel
+import scipy.ndimage as ndi
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+
+
+GABOR_FREQUENCIES = [0.05, 0.15, 0.25]
+GABOR_THETAS = [0, np.pi/4, np.pi/2]
+GABOR_SIGMAS = [1, 3]
 
 def get_labels(repo_dir):
     label = pd.read_csv(
@@ -365,39 +385,32 @@ def calculate_std_within_blob(image_channel, blob):
 
 def apply_gabor_filters_and_extract_features(image, frequencies, thetas, sigmas):
     """
-    Apply Gabor filters to an image at specified frequencies and orientations, and extract features.
-    Loosely based on https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_gabor.html
-
-    :param image: cv2 RGB image
-    :param frequencies: List of frequencies for the Gabor kernels.
-    :param thetas: List of orientations in radians for the Gabor kernels.
-    :return: Dictionary of features with keys as (frequency, theta) tuples.
+    Apply Gabor filters using skimage's gabor_kernel and extract features.
     """
-    # convert the image in grayscale
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    # Convert image to grayscale if it's not already
+    if len(image.shape) == 3:
+        image = color.rgb2gray(image)
 
-    # List to store the features from all filters
-    feature_vector = []
-
-    # prepare filter bank kernels
+    # Prepare filter bank kernels
     kernels = []
     for theta in thetas:
         for sigma in sigmas:
             for frequency in frequencies:
-                # Create a Gabor kernel with the given frequency and theta
-                kernel = np.real(
-                    gabor_kernel(frequency, theta=theta, sigma_x=sigma, sigma_y=sigma)
-                )
+                # Use skimage's gabor_kernel function
+                kernel = gabor_kernel(frequency, theta=theta, sigma_x=sigma, sigma_y=sigma)
                 kernels.append(kernel)
 
     # Apply Gabor filters at each combination of frequency and theta
-    for real_kernel in kernels:
+    feature_vector = []
+    for kernel in kernels:
         # Filter the image using the real part of the kernel
-        filtered_image = convolve(image, real_kernel)
+        real_kernel = np.real(kernel)
+        filtered_image = ndi.convolve(image, real_kernel, mode='wrap')
 
         # Calculate statistical features from the filtered image
         mean_val = np.mean(filtered_image)
         std_val = np.std(filtered_image)
+        from scipy.stats import skew, kurtosis
         skew_val = skew(filtered_image.ravel())
         kurt_val = kurtosis(filtered_image.ravel())
 
@@ -405,6 +418,115 @@ def apply_gabor_filters_and_extract_features(image, frequencies, thetas, sigmas)
         feature_vector.extend([mean_val, std_val, skew_val, kurt_val])
 
     return feature_vector
+
+class ImageHeuristicFeatureExtractor:
+    def __init__(self, data_folder_path: str, label: pd.DataFrame):
+        self.data_folder_path = data_folder_path
+        self.label = label
+        self.histograms_rgb = []
+        self.histograms_hsv = []
+        self.graycomatrix_features = []
+        self.gabor_features = []
+        self.list_images = []
+        self.list_filenames = []
+        self.df = pd.DataFrame # sample dataframe that contains file names
+
+    def extract_features(self):
+        for image_name in tqdm(os.listdir(self.data_folder_path)):
+            if ".DS_Store" in image_name:
+                continue
+
+            image_path = os.path.join(self.data_folder_path, image_name)
+            if os.path.exists(image_path):
+                clean_image_name = image_name.split(".")[0]
+                self.list_filenames.append(clean_image_name)
+
+                if "augmented" in clean_image_name:
+                    clean_image_name = "_".join(clean_image_name.split("_")[-2:])
+
+                self.list_images.append(clean_image_name)
+
+                image_rgb = self.load_image(image_path)
+                self.process_image(image_rgb)
+
+        return self.merge_features()
+
+    def load_image(self, image_path: str):
+        # Placeholder for actual image loading logic
+        return load_image(image_path, BGR2RGB=True)
+
+    def process_image(self, image_rgb):
+        self.histograms_rgb.append(create_histogram(image_rgb, "RGB"))
+        self.histograms_hsv.append(create_histogram(image_rgb, "HSV"))
+        self.graycomatrix_features.append(calculate_glcm_features(image_rgb))
+        #self.gabor_features.append(apply_gabor_filters_and_extract_features(image_rgb, GABOR_FREQUENCIES, GABOR_THETAS, GABOR_SIGMAS))
+
+    def merge_features(self):
+        df_rgb = pd.merge(pd.DataFrame(np.array(self.histograms_rgb).reshape(len(self.histograms_rgb), -1), index=self.list_images), self.label.set_index("image_id"), left_index=True, right_index=True)
+        df_hsv = pd.merge(pd.DataFrame(np.array(self.histograms_hsv).reshape(len(self.histograms_hsv), -1), index=self.list_images), self.label.set_index("image_id"), left_index=True, right_index=True)
+        df_glcm = pd.merge(pd.DataFrame(np.array(self.graycomatrix_features), index=self.list_images), self.label.set_index("image_id"), left_index=True, right_index=True)
+
+        df_rgb["filename"] = self.list_filenames
+        df_hsv["filename"] = self.list_filenames
+        df_glcm["filename"] = self.list_filenames
+
+        df_rgb["image_id"] = self.list_images
+        df_hsv["image_id"] = self.list_images
+        df_glcm["image_id"] = self.list_images
+
+        try:
+            df_gabor = pd.merge(pd.DataFrame(np.array(self.gabor_features), index=self.list_images), self.label.set_index("image_id"), left_index=True, right_index=True)
+            df_gabor["filename"] = self.list_filenames
+            df_gabor["image_id"] = self.list_images
+        except ValueError:
+            df_gabor = pd.DataFrame()
+
+        self.df = df_glcm
+        return df_rgb, df_hsv, df_glcm, df_gabor
+
+    def get_feature_and_label_arrays(self):
+        dfs = self.extract_features()
+        feature_label_pairs = {}
+        for i, df in enumerate(dfs):
+            if len(df) == 0:
+                continue
+
+            feature_type = ['rgb', 'hsv', 'glcm', 'gabor'][i]
+            num_features = [3*256, 3*256, 6, 72][i]
+            x = df.iloc[:, :num_features].to_numpy()
+            y = df["cancer"].to_numpy()
+            feature_label_pairs[feature_type] = (x, y)
+        return feature_label_pairs
+
+    def return_one_df(self):
+        return self.df
+
+
+def standardize_features(features: np.ndarray, use_pca: bool = False, n_components: int = None):
+    """
+    Standardizes the features and optionally applies PCA for dimensionality reduction.
+
+    :param features: The feature matrix to process.
+    :param use_pca: Whether to apply PCA. Default is False.
+    :param n_components: The number of principal components to keep if PCA is applied. If None and use_pca is True, all components are kept.
+    :return: The processed feature matrix.
+    """
+
+    # Initialize the StandardScaler
+    scaler = StandardScaler()
+    # Standardize the features
+    standardized_features = scaler.fit_transform(features)
+
+    # Check if PCA should be applied
+    if use_pca:
+        # Initialize PCA with the specified number of components
+        pca = PCA(n_components=n_components)
+        # Apply PCA
+        processed_features = pca.fit_transform(standardized_features)
+        return processed_features
+    else:
+        return standardized_features
+
 
 
 def load_image(image_path: str, BGR2RGB=True) -> np.ndarray:

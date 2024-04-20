@@ -77,7 +77,7 @@ def merge_features_with_labels(
         )
         merged_data.to_csv(export_path)
 
-    return merged_data
+    return merged_data.sort_values(by="filename").reset_index(drop=True)
 
 
 def not_oversampled_images(features_dataframe: pd.DataFrame) -> list[bool]:
@@ -191,3 +191,4 @@ def plot_low_dim_components(
     plt.ylabel(f"{label} Component {component_2}")
     plt.title(f"{label} of Image Data")
     plt.legend()
+
