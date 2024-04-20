@@ -4,37 +4,35 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.ndimage import convolve
+import scipy.ndimage as ndi
+from PIL import Image
 from scipy.stats import kurtosis, skew
 from skimage import color, feature
 from skimage.draw import disk
 from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 from skimage.filters import gabor_kernel
-from tqdm import tqdm
-import cv2
-import numpy as np
-import scipy.ndimage
-from scipy.stats import skew, kurtosis
-from concurrent.futures import ProcessPoolExecutor
-from functools import partial
-
-import numpy as np
-import matplotlib.pyplot as plt
-from skimage import io, color
-from skimage.filters import gabor_kernel
-import scipy.ndimage as ndi
-
-from sklearn.preprocessing import StandardScaler
-
 from sklearn.decomposition import PCA
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+)
+from sklearn.preprocessing import StandardScaler
+from torch.utils.data import Dataset
+from tqdm import tqdm
 
+import methods
 
 GABOR_FREQUENCIES = [0.05, 0.15, 0.25]
-GABOR_THETAS = [0, np.pi/4, np.pi/2]
+GABOR_THETAS = [0, np.pi / 4, np.pi / 2]
 GABOR_SIGMAS = [1, 3]
 
 GLCM_DISTANCES = [1, 3, 5, 10, 50, 100]
 GLCM_ANGLES = [0, np.pi / 4, np.pi / 2, 3 * np.pi / 4]
+
 
 def get_labels(repo_dir):
     label = pd.read_csv(
@@ -400,7 +398,9 @@ def apply_gabor_filters_and_extract_features(image, frequencies, thetas, sigmas)
         for sigma in sigmas:
             for frequency in frequencies:
                 # Use skimage's gabor_kernel function
-                kernel = gabor_kernel(frequency, theta=theta, sigma_x=sigma, sigma_y=sigma)
+                kernel = gabor_kernel(
+                    frequency, theta=theta, sigma_x=sigma, sigma_y=sigma
+                )
                 kernels.append(kernel)
 
     # Apply Gabor filters at each combination of frequency and theta
@@ -408,12 +408,11 @@ def apply_gabor_filters_and_extract_features(image, frequencies, thetas, sigmas)
     for kernel in kernels:
         # Filter the image using the real part of the kernel
         real_kernel = np.real(kernel)
-        filtered_image = ndi.convolve(image, real_kernel, mode='wrap')
+        filtered_image = ndi.convolve(image, real_kernel, mode="wrap")
 
         # Calculate statistical features from the filtered image
         mean_val = np.mean(filtered_image)
         std_val = np.std(filtered_image)
-        from scipy.stats import skew, kurtosis
         skew_val = skew(filtered_image.ravel())
         kurt_val = kurtosis(filtered_image.ravel())
 
@@ -421,6 +420,7 @@ def apply_gabor_filters_and_extract_features(image, frequencies, thetas, sigmas)
         feature_vector.extend([mean_val, std_val, skew_val, kurt_val])
 
     return feature_vector
+
 
 class ImageHeuristicFeatureExtractor:
     def __init__(self, data_folder_path: str, label: pd.DataFrame):
@@ -432,7 +432,7 @@ class ImageHeuristicFeatureExtractor:
         self.gabor_features = []
         self.list_images = []
         self.list_filenames = []
-        self.df = pd.DataFrame # sample dataframe that contains file names
+        self.df = pd.DataFrame  # sample dataframe that contains file names
 
     def extract_features(self):
         for image_name in tqdm(os.listdir(self.data_folder_path)):
@@ -463,19 +463,31 @@ class ImageHeuristicFeatureExtractor:
         self.histograms_rgb.append(create_histogram(image_rgb, "RGB"))
         self.histograms_hsv.append(create_histogram(image_rgb, "HSV"))
         self.graycomatrix_features.append(calculate_glcm_features(image_rgb))
-        #self.gabor_features.append(apply_gabor_filters_and_extract_features(image_rgb, GABOR_FREQUENCIES, GABOR_THETAS, GABOR_SIGMAS))
+        # self.gabor_features.append(apply_gabor_filters_and_extract_features(image_rgb, GABOR_FREQUENCIES, GABOR_THETAS, GABOR_SIGMAS))
 
     def merge_features(self):
 
-        tmp_rgb = pd.DataFrame(pd.DataFrame(np.array(self.histograms_rgb).reshape(len(self.histograms_rgb), -1), index=self.list_images))
+        tmp_rgb = pd.DataFrame(
+            pd.DataFrame(
+                np.array(self.histograms_rgb).reshape(len(self.histograms_rgb), -1),
+                index=self.list_images,
+            )
+        )
         tmp_rgb["filename"] = self.list_filenames
         tmp_rgb["image_id"] = self.list_images
 
-        tmp_hsv = pd.DataFrame(pd.DataFrame(np.array(self.histograms_hsv).reshape(len(self.histograms_hsv), -1), index=self.list_images))
+        tmp_hsv = pd.DataFrame(
+            pd.DataFrame(
+                np.array(self.histograms_hsv).reshape(len(self.histograms_hsv), -1),
+                index=self.list_images,
+            )
+        )
         tmp_hsv["filename"] = self.list_filenames
         tmp_hsv["image_id"] = self.list_images
 
-        tmp_glcm = pd.DataFrame(np.array(self.graycomatrix_features), index=self.list_images)
+        tmp_glcm = pd.DataFrame(
+            np.array(self.graycomatrix_features), index=self.list_images
+        )
         tmp_glcm["filename"] = self.list_filenames
         tmp_glcm["image_id"] = self.list_images
 
@@ -484,11 +496,15 @@ class ImageHeuristicFeatureExtractor:
         df_glcm = pd.merge(tmp_glcm, self.label, left_index=True, right_index=True)
 
         try:
-            tmp_gabor = pd.DataFrame(np.array(self.gabor_features), index=self.list_images)
+            tmp_gabor = pd.DataFrame(
+                np.array(self.gabor_features), index=self.list_images
+            )
             tmp_gabor["filename"] = self.list_filenames
             tmp_gabor["image_id"] = self.list_images
 
-            df_gabor = pd.merge(tmp_gabor, self.label, left_index=True, right_index=True)
+            df_gabor = pd.merge(
+                tmp_gabor, self.label, left_index=True, right_index=True
+            )
         except ValueError:
             df_gabor = pd.DataFrame()
 
@@ -502,8 +518,8 @@ class ImageHeuristicFeatureExtractor:
             if len(df) == 0:
                 continue
 
-            feature_type = ['rgb', 'hsv', 'glcm', 'gabor'][i]
-            num_features = [3*256, 3*256, 6, 72][i]
+            feature_type = ["rgb", "hsv", "glcm", "gabor"][i]
+            num_features = [3 * 256, 3 * 256, 6, 72][i]
             x = df.iloc[:, :num_features].to_numpy()
             y = df["cancer"].to_numpy()
             feature_label_pairs[feature_type] = (x, y)
@@ -516,7 +532,9 @@ class ImageHeuristicFeatureExtractor:
         return self.list_filenames
 
 
-def standardize_features(features: np.ndarray, use_pca: bool = False, n_components: int = None):
+def standardize_features(
+    features: np.ndarray, use_pca: bool = False, n_components: int = None
+):
     """
     Standardizes the features and optionally applies PCA for dimensionality reduction.
 
@@ -540,7 +558,6 @@ def standardize_features(features: np.ndarray, use_pca: bool = False, n_componen
         return processed_features
     else:
         return standardized_features
-
 
 
 def load_image(image_path: str, BGR2RGB=True) -> np.ndarray:
@@ -609,25 +626,6 @@ def generate_feature_vector(train_vectors: list, test_vectors: list):
     return x_train, x_test
 
 
-import os
-
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from PIL import Image
-from sklearn.metrics import (
-    ConfusionMatrixDisplay,
-    accuracy_score,
-    confusion_matrix,
-    f1_score,
-    precision_score,
-    recall_score,
-)
-from torch.utils.data import Dataset
-
-import methods
-
-
 class ImageDataset(Dataset):
     def __init__(self, directory, transform=None):
         self.directory = directory
@@ -667,9 +665,9 @@ def load_features(features_path: str) -> pd.DataFrame:
 
 
 def merge_features_with_labels(
-        features_path: str,
-        labels_df: pd.DataFrame,
-        export: bool = False,
+    features_path: str,
+    labels_df: pd.DataFrame,
+    export: bool = False,
 ) -> pd.DataFrame:
     """Merge image features with labels into a single DataFrame."""
     features = load_features(features_path)
@@ -685,7 +683,7 @@ def merge_features_with_labels(
         export_path = os.path.join(
             os.path.dirname(features_path),
             features_path.split(".")[-2].split("/")[-1] + "_pandas.csv",
-            )
+        )
         merged_data.to_csv(export_path)
 
     return merged_data
@@ -775,7 +773,7 @@ def plot_confusion_matrix(y_test, y_pred, print_metrics=True):
 
 
 def plot_low_dim_components(
-        x_train_low_dim, y_train, label="PCA", component_1=0, component_2=1
+    x_train_low_dim, y_train, label="PCA", component_1=0, component_2=1
 ):
     # Scatter plot of the first two PCA components
     # Here, X_pca[:, 0] is the first component, X_pca[:, 1] is the second component
@@ -802,4 +800,3 @@ def plot_low_dim_components(
     plt.ylabel(f"{label} Component {component_2}")
     plt.title(f"{label} of Image Data")
     plt.legend()
-
