@@ -4,13 +4,49 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.ndimage import convolve
+import scipy.ndimage as ndi
+from PIL import Image
 from scipy.stats import kurtosis, skew
 from skimage import color, feature
 from skimage.draw import disk
 from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 from skimage.filters import gabor_kernel
+from sklearn.decomposition import PCA
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+)
+from sklearn.preprocessing import StandardScaler
+from torch.utils.data import Dataset
 from tqdm import tqdm
+
+import methods
+
+GABOR_FREQUENCIES = [0.05, 0.15, 0.25]
+GABOR_THETAS = [0, np.pi / 4, np.pi / 2]
+GABOR_SIGMAS = [1, 3]
+
+GLCM_DISTANCES = [1, 3, 5, 10, 50, 100]
+GLCM_ANGLES = [0, np.pi / 4, np.pi / 2, 3 * np.pi / 4]
+
+
+def get_labels(repo_dir):
+    label = pd.read_csv(
+        os.path.join(repo_dir, "dataverse_files/", "HAM10000_metadata.csv")
+    )
+
+    # label = label.set_index('image_id')
+    cancerous = ["akiec", "bcc", "mel"]
+    non_cancerous = ["bkl", "df", "nv", "vasc"]
+    label["cancer"] = False
+    label.loc[label["dx"].isin(cancerous), "cancer"] = True
+    label.loc[label["dx"].isin(non_cancerous), "cancer"] = False
+
+    return label
 
 
 def z_normalization(image: np.array, normalize=True) -> np.array:
@@ -165,8 +201,8 @@ def calculate_glcm_features_for_blob(gray_image, blob):
     # compute the GLCM
     glcm = graycomatrix(
         roi_image,
-        distances=[1, 2, 3],
-        angles=[0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
+        distances=GLCM_DISTANCES,
+        angles=GLCM_ANGLES,
         symmetric=True,
         normed=True,
     )
@@ -208,8 +244,8 @@ def calculate_glcm_features(image: np.ndarray) -> list:
 
     glcm = graycomatrix(
         gray_image,
-        distances=[1, 2, 3],
-        angles=[0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
+        distances=GLCM_DISTANCES,
+        angles=GLCM_ANGLES,
         symmetric=True,
         normed=True,
     )
@@ -350,35 +386,29 @@ def calculate_std_within_blob(image_channel, blob):
 
 def apply_gabor_filters_and_extract_features(image, frequencies, thetas, sigmas):
     """
-    Apply Gabor filters to an image at specified frequencies and orientations, and extract features.
-    Loosely based on https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_gabor.html
-
-    :param image: cv2 RGB image
-    :param frequencies: List of frequencies for the Gabor kernels.
-    :param thetas: List of orientations in radians for the Gabor kernels.
-    :return: Dictionary of features with keys as (frequency, theta) tuples.
+    Apply Gabor filters using skimage's gabor_kernel and extract features.
     """
-    # convert the image in grayscale
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    # Convert image to grayscale if it's not already
+    if len(image.shape) == 3:
+        image = color.rgb2gray(image)
 
-    # List to store the features from all filters
-    feature_vector = []
-
-    # prepare filter bank kernels
+    # Prepare filter bank kernels
     kernels = []
     for theta in thetas:
         for sigma in sigmas:
             for frequency in frequencies:
-                # Create a Gabor kernel with the given frequency and theta
-                kernel = np.real(
-                    gabor_kernel(frequency, theta=theta, sigma_x=sigma, sigma_y=sigma)
+                # Use skimage's gabor_kernel function
+                kernel = gabor_kernel(
+                    frequency, theta=theta, sigma_x=sigma, sigma_y=sigma
                 )
                 kernels.append(kernel)
 
     # Apply Gabor filters at each combination of frequency and theta
-    for real_kernel in kernels:
+    feature_vector = []
+    for kernel in kernels:
         # Filter the image using the real part of the kernel
-        filtered_image = convolve(image, real_kernel)
+        real_kernel = np.real(kernel)
+        filtered_image = ndi.convolve(image, real_kernel, mode="wrap")
 
         # Calculate statistical features from the filtered image
         mean_val = np.mean(filtered_image)
@@ -390,6 +420,144 @@ def apply_gabor_filters_and_extract_features(image, frequencies, thetas, sigmas)
         feature_vector.extend([mean_val, std_val, skew_val, kurt_val])
 
     return feature_vector
+
+
+class ImageHeuristicFeatureExtractor:
+    def __init__(self, data_folder_path: str, label: pd.DataFrame):
+        self.data_folder_path = data_folder_path
+        self.label = label
+        self.histograms_rgb = []
+        self.histograms_hsv = []
+        self.graycomatrix_features = []
+        self.gabor_features = []
+        self.list_images = []
+        self.list_filenames = []
+        self.df = pd.DataFrame  # sample dataframe that contains file names
+
+    def extract_features(self):
+        for image_name in tqdm(os.listdir(self.data_folder_path)):
+            if ".DS_Store" in image_name:
+                continue
+
+            image_path = os.path.join(self.data_folder_path, image_name)
+            if os.path.exists(image_path):
+                filename = image_name.split(".")[0]
+                self.list_filenames.append(filename)
+
+                if "augmented" in filename:
+                    clean_image_name = "_".join(filename.split("_")[-2:])
+                else:
+                    clean_image_name = filename
+
+                self.list_images.append(clean_image_name)
+
+                image_rgb = self.load_image(image_path)
+                self.process_image(image_rgb)
+
+        return self.merge_features()
+
+    def load_image(self, image_path: str):
+        return load_image(image_path, BGR2RGB=True)
+
+    def process_image(self, image_rgb):
+        self.histograms_rgb.append(create_histogram(image_rgb, "RGB"))
+        self.histograms_hsv.append(create_histogram(image_rgb, "HSV"))
+        self.graycomatrix_features.append(calculate_glcm_features(image_rgb))
+        # self.gabor_features.append(apply_gabor_filters_and_extract_features(image_rgb, GABOR_FREQUENCIES, GABOR_THETAS, GABOR_SIGMAS))
+
+    def merge_features(self):
+
+        tmp_rgb = pd.DataFrame(
+            pd.DataFrame(
+                np.array(self.histograms_rgb).reshape(len(self.histograms_rgb), -1),
+                index=self.list_images,
+            )
+        )
+        tmp_rgb["filename"] = self.list_filenames
+        tmp_rgb["image_id"] = self.list_images
+
+        tmp_hsv = pd.DataFrame(
+            pd.DataFrame(
+                np.array(self.histograms_hsv).reshape(len(self.histograms_hsv), -1),
+                index=self.list_images,
+            )
+        )
+        tmp_hsv["filename"] = self.list_filenames
+        tmp_hsv["image_id"] = self.list_images
+
+        tmp_glcm = pd.DataFrame(
+            np.array(self.graycomatrix_features), index=self.list_images
+        )
+        tmp_glcm["filename"] = self.list_filenames
+        tmp_glcm["image_id"] = self.list_images
+
+        df_rgb = pd.merge(tmp_rgb, self.label, left_index=True, right_index=True)
+        df_hsv = pd.merge(tmp_hsv, self.label, left_index=True, right_index=True)
+        df_glcm = pd.merge(tmp_glcm, self.label, left_index=True, right_index=True)
+
+        try:
+            tmp_gabor = pd.DataFrame(
+                np.array(self.gabor_features), index=self.list_images
+            )
+            tmp_gabor["filename"] = self.list_filenames
+            tmp_gabor["image_id"] = self.list_images
+
+            df_gabor = pd.merge(
+                tmp_gabor, self.label, left_index=True, right_index=True
+            )
+        except ValueError:
+            df_gabor = pd.DataFrame()
+
+        self.df = df_glcm
+        return df_rgb, df_hsv, df_glcm, df_gabor
+
+    def get_feature_and_label_arrays(self):
+        dfs = self.extract_features()
+        feature_label_pairs = {}
+        for i, df in enumerate(dfs):
+            if len(df) == 0:
+                continue
+
+            feature_type = ["rgb", "hsv", "glcm", "gabor"][i]
+            num_features = [3 * 256, 3 * 256, 6, 72][i]
+            x = df.iloc[:, :num_features].to_numpy()
+            y = df["cancer"].to_numpy()
+            feature_label_pairs[feature_type] = (x, y)
+        return feature_label_pairs
+
+    def return_one_df(self):
+        return self.df
+
+    def return_list_filenames(self):
+        return self.list_filenames
+
+
+def standardize_features(
+    features: np.ndarray, use_pca: bool = False, n_components: int = None
+):
+    """
+    Standardizes the features and optionally applies PCA for dimensionality reduction.
+
+    :param features: The feature matrix to process.
+    :param use_pca: Whether to apply PCA. Default is False.
+    :param n_components: The number of principal components to keep if PCA is applied. If None and use_pca is True, all components are kept.
+    :return: The processed feature matrix.
+    """
+
+    # Initialize the StandardScaler
+    scaler = StandardScaler()
+    # Standardize the features
+    standardized_features = scaler.fit_transform(features)
+
+    # Check if PCA should be applied
+    if use_pca:
+        # Initialize PCA with the specified number of components
+        pca = PCA(n_components=n_components)
+        # Apply PCA
+        processed_features = pca.fit_transform(standardized_features)
+        return processed_features
+    else:
+        return standardized_features
 
 
 def load_image(image_path: str, BGR2RGB=True) -> np.ndarray:
@@ -456,3 +624,179 @@ def generate_feature_vector(train_vectors: list, test_vectors: list):
     x_test = process_vectors(test_vectors)
 
     return x_train, x_test
+
+
+class ImageDataset(Dataset):
+    def __init__(self, directory, transform=None):
+        self.directory = directory
+        self.transform = transform
+        self.images = [
+            os.path.join(directory, f)
+            for f in os.listdir(directory)
+            if f.endswith((".jpg", ".png"))
+        ]
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        # Do preprocessing here
+        image_path = self.images[idx]
+        rgb_image_arr = methods.convert_rgb(image_path)
+        normalised_img = methods.z_normalization(rgb_image_arr)
+        image = Image.fromarray(normalised_img.astype("uint8"), "RGB")
+        image_tensor = self.transform(image) if self.transform else image
+        key = os.path.basename(image_path).removesuffix(".jpg").removesuffix(".png")
+        return key, image_tensor
+
+
+def extract_image_ids(filenames: list) -> pd.DataFrame:
+    """Extract image IDs from filenames assuming format includes ID as the last two underscore-separated parts."""
+    image_ids = ["_".join(name.split("_")[-2:]) for name in filenames]
+    return pd.DataFrame({"filename": filenames, "image_id": image_ids})
+
+
+def load_features(features_path: str) -> pd.DataFrame:
+    """Load features from a JSON file and transpose the dataframe."""
+    if not features_path.endswith(".json"):
+        raise ValueError("Invalid file type: JSON expected")
+    features = pd.read_json(features_path).T
+    return features
+
+
+def merge_features_with_labels(
+    features_path: str,
+    labels_df: pd.DataFrame,
+    export: bool = False,
+) -> pd.DataFrame:
+    """Merge image features with labels into a single DataFrame."""
+    features = load_features(features_path)
+
+    filenames = features.T.columns.to_numpy()
+    temp_files = extract_image_ids(filenames)
+
+    label_data = temp_files.merge(labels_df, on="image_id", how="left")
+
+    merged_data = features.merge(label_data, left_index=True, right_on="image_id")
+
+    if export:
+        export_path = os.path.join(
+            os.path.dirname(features_path),
+            features_path.split(".")[-2].split("/")[-1] + "_pandas.csv",
+        )
+        merged_data.to_csv(export_path)
+
+    return merged_data
+
+
+def not_oversampled_images(features_dataframe: pd.DataFrame) -> list[bool]:
+    """
+    Generate a list indicating whether each image in the dataframe should be included
+    in testing based on whether it has been augmented.
+
+    :param features_dataframe: A DataFrame containing image metadata with columns 'filename' and 'image_id'.
+    :return: A list of booleans where True indicates the image has not been augmented,
+                and False indicates it has.
+    """
+
+    # Extract augmented image IDs
+    augmented_ids = set(
+        "_".join(
+            filename.split("_")[-2:]
+        )  # Assuming the ID is in the last two parts of the filename
+        for filename in features_dataframe.filename
+        if "augmented" in filename
+    )
+
+    # Determine inclusion in testing for each image
+    include_in_testing = [
+        image_id not in augmented_ids for image_id in features_dataframe.image_id
+    ]
+
+    return include_in_testing
+
+
+def calculate_test_size(dataframe, test_size, include_in_testing):
+    """
+    Calculate the adjusted test size for splitting the dataset, excluding oversampled entries.
+
+    :param dataframe: The complete dataframe.
+    :param test_size: The desired proportion of the test set size relative to the unique images.
+    :param include_in_testing: Boolean array indicating which images are not oversampled.
+    :return: Adjusted test size.
+    """
+    unique_image_count = len(np.unique(dataframe.image_id))
+    valid_image_count = np.sum(include_in_testing)
+    return test_size * unique_image_count / valid_image_count
+
+
+def calculate_metrics(y_test, y_pred):
+    """
+    Calculates and prints the accuracy, precision, recall, and F1 score for the given test labels and predictions.
+
+    :param y_test: True labels for the test set.
+    :param y_pred: Predicted labels for the test set.
+    :return:
+    """
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, pos_label=1)
+    recall = recall_score(y_test, y_pred, pos_label=1)
+    f1 = f1_score(y_test, y_pred, pos_label=1)
+
+    print(f"Accuracy: {accuracy}")
+    print(f"Precision: {precision}")
+    print(f"Recall: {recall}")
+    print(f"F1 Score: {f1}")
+
+
+def plot_confusion_matrix(y_test, y_pred, print_metrics=True):
+    """
+    Plots the confusion matrix for the given test labels and predictions.
+
+    :param y_test: True labels for the test set.
+    :param y_pred: Predicted labels for the test set.
+    :return:
+    """
+    if print_metrics:
+        calculate_metrics(y_test, y_pred)
+
+    # Compute the confusion matrix
+    conf_matrix = confusion_matrix(y_test, y_pred)
+
+    # Initialize the ConfusionMatrixDisplay object with the confusion matrix
+    cmd = ConfusionMatrixDisplay(conf_matrix)
+
+    # Plot the confusion matrix
+    cmd.plot(cmap=plt.cm.Blues)
+    plt.title("Confusion Matrix")
+    plt.show()
+
+
+def plot_low_dim_components(
+    x_train_low_dim, y_train, label="PCA", component_1=0, component_2=1
+):
+    # Scatter plot of the first two PCA components
+    # Here, X_pca[:, 0] is the first component, X_pca[:, 1] is the second component
+    plt.figure(figsize=(10, 7))
+    plt.scatter(
+        x_train_low_dim[y_train == 0, component_1],
+        x_train_low_dim[y_train == 0, component_2],
+        c="blue",
+        label="Non-Cancerous",
+        alpha=0.5,
+    )
+
+    # Non-cancerous in blue
+    plt.scatter(
+        x_train_low_dim[y_train == 1, component_1],
+        x_train_low_dim[y_train == 1, component_2],
+        c="red",
+        label="Cancerous",
+        alpha=0.5,
+    )  # Cancerous labeled in red
+
+    # Adding labels and title
+    plt.xlabel(f"{label} Component {component_1}")
+    plt.ylabel(f"{label} Component {component_2}")
+    plt.title(f"{label} of Image Data")
+    plt.legend()

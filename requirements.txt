@@ -11,3 +11,5 @@ tqdm~=4.66.2
 scikit-learn~=1.2.2
 py-opencv~=4.9.0
 opencv~=4.9.0
+torchvision~=0.17.2
+pillow~=10.3.0
