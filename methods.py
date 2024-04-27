@@ -39,6 +39,12 @@ def get_labels(repo_dir):
         os.path.join(repo_dir, "dataverse_files/", "HAM10000_metadata.csv")
     )
 
+    label2 = pd.read_csv(
+        os.path.join(repo_dir, "dataverse_files/", "ISIC2018_Task3_Test_GroundTruth.csv")
+    )
+
+    label = pd.concat([label, label2])
+
     # label = label.set_index('image_id')
     cancerous = ["akiec", "bcc", "mel"]
     non_cancerous = ["bkl", "df", "nv", "vasc"]
