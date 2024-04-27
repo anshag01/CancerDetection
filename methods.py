@@ -40,7 +40,9 @@ def get_labels(repo_dir):
     )
 
     label2 = pd.read_csv(
-        os.path.join(repo_dir, "dataverse_files/", "ISIC2018_Task3_Test_GroundTruth.csv")
+        os.path.join(
+            repo_dir, "dataverse_files/", "ISIC2018_Task3_Test_GroundTruth.csv"
+        )
     )
 
     label = pd.concat([label, label2])
