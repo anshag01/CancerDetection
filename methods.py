@@ -36,7 +36,7 @@ GLCM_ANGLES = [0, np.pi / 4, np.pi / 2, 3 * np.pi / 4]
 
 def get_labels(repo_dir):
     label = pd.read_csv(
-        os.path.join(repo_dir, "dataverse_files/", "HAM10000_metadata.csv")
+        os.path.join(repo_dir, "../dataverse_files/", "HAM10000_metadata.csv")
     )
 
     # label = label.set_index('image_id')
