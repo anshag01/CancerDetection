@@ -757,7 +757,7 @@ def calculate_metrics(y_test, y_pred):
     print(f"F1 Score: {f1}")
 
 
-def plot_confusion_matrix(y_test, y_pred, print_metrics=True):
+def plot_confusion_matrix(y_test, y_pred, print_metrics=True, return_fig=False):
     """
     Plots the confusion matrix for the given test labels and predictions.
 
@@ -777,15 +777,24 @@ def plot_confusion_matrix(y_test, y_pred, print_metrics=True):
     # Plot the confusion matrix
     cmd.plot(cmap=plt.cm.Blues)
     plt.title("Confusion Matrix")
-    plt.show()
+
+    if return_fig:
+        return cmd
+    else:
+        plt.show()
 
 
 def plot_low_dim_components(
-    x_train_low_dim, y_train, label="PCA", component_1=0, component_2=1
+    x_train_low_dim,
+    y_train,
+    label="PCA",
+    component_1=0,
+    component_2=1,
+    return_fig=False,
 ):
     # Scatter plot of the first two PCA components
     # Here, X_pca[:, 0] is the first component, X_pca[:, 1] is the second component
-    plt.figure(figsize=(10, 7))
+    fig = plt.figure(figsize=(10, 7))
     plt.scatter(
         x_train_low_dim[y_train == 0, component_1],
         x_train_low_dim[y_train == 0, component_2],
@@ -808,3 +817,6 @@ def plot_low_dim_components(
     plt.ylabel(f"{label} Component {component_2}")
     plt.title(f"{label} of Image Data")
     plt.legend()
+
+    if return_fig:
+        return fig
