@@ -785,7 +785,12 @@ def plot_confusion_matrix(y_test, y_pred, print_metrics=True, return_fig=False):
 
 
 def plot_low_dim_components(
-    x_train_low_dim, y_train, label="PCA", component_1=0, component_2=1, return_fig=False
+    x_train_low_dim,
+    y_train,
+    label="PCA",
+    component_1=0,
+    component_2=1,
+    return_fig=False,
 ):
     # Scatter plot of the first two PCA components
     # Here, X_pca[:, 0] is the first component, X_pca[:, 1] is the second component
